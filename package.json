@@ -1,0 +1,29 @@
+{
+    "name": "9router-mcp",
+    "version": "0.1.0",
+    "type": "module",
+    "description": "MCP tools for 9Router capabilities",
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "bin": {
+        "9router-mcp": "./dist/index.js"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "prepack": "npm run build",
+        "start": "node dist/index.js",
+        "dev": "tsx watch src/index.ts"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/server": "^2.0.0-beta.2",
+        "@iarna/toml": "^2.2.5",
+        "zod": "^4.0.0"
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "tsx": "^4.19.0",
+        "typescript": "^5.6.0"
+    }
+}
