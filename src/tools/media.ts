@@ -1,11 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
 import { createFileBlob, fileNameFromPath, type NinerouterConfig, requestBinary, requestJson, requestMultipartText } from "../ninerouter-client.js";
-import { pickModel, toPrettyJson } from "./common.js";
+import { pickModel, toPrettyJson, tryModelsWithFallback } from "./common.js";
 
 export function registerMediaTools(server: McpServer, config: NinerouterConfig): void {
     server.registerTool(
-        "ninerouter_generate_image",
+        "generate_image",
         {
             description: "Generate an image through 9Router and return the upstream response as JSON or base64.",
             inputSchema: z.object({
@@ -19,36 +19,46 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
             }),
         },
         async ({ prompt, model, provider, n, size, quality, responseFormat }) => {
-            const selectedModel = pickModel(model, provider);
+            const userModel = model ?? provider;
+            const defaultModels = config.defaultModels?.generateImage ?? [];
+            const modelsToTry = userModel ? [userModel] : defaultModels;
+
+            if (modelsToTry.length === 0) {
+                throw new Error("No model specified and no default_models.generate_image configured.");
+            }
 
             if (responseFormat === "binary") {
-                const binary = await requestBinary(
-                    config,
-                    "/v1/images/generations",
-                    {
-                        model: selectedModel,
-                        prompt,
-                        n,
-                        size,
-                        quality,
-                    },
-                    {
-                        response_format: "binary",
-                    },
-                );
+                const binary = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
+                    return await requestBinary(
+                        config,
+                        "/v1/images/generations",
+                        {
+                            model: selectedModel,
+                            prompt,
+                            n,
+                            size,
+                            quality,
+                        },
+                        {
+                            response_format: "binary",
+                        },
+                    );
+                });
 
                 return {
-                    content: [{ type: "text", text: toPrettyJson({ model: selectedModel, contentType: binary.contentType, base64: binary.base64 }) }],
+                    content: [{ type: "text", text: toPrettyJson({ contentType: binary.contentType, base64: binary.base64 }) }],
                 };
             }
 
-            const payload = await requestJson(config, "/v1/images/generations", {
-                model: selectedModel,
-                prompt,
-                n,
-                size,
-                quality,
-                response_format: responseFormat,
+            const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
+                return await requestJson(config, "/v1/images/generations", {
+                    model: selectedModel,
+                    prompt,
+                    n,
+                    size,
+                    quality,
+                    response_format: responseFormat,
+                });
             });
 
             return {
@@ -58,7 +68,7 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
     );
 
     server.registerTool(
-        "ninerouter_text_to_speech",
+        "text_to_speech",
         {
             description: "Convert text to speech through 9Router and return base64-encoded audio.",
             inputSchema: z.object({
@@ -69,31 +79,41 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
             }),
         },
         async ({ input, model, provider, responseFormat }) => {
-            const selectedModel = pickModel(model, provider);
+            const userModel = model ?? provider;
+            const defaultModels = config.defaultModels?.textToSpeech ?? [];
+            const modelsToTry = userModel ? [userModel] : defaultModels;
+
+            if (modelsToTry.length === 0) {
+                throw new Error("No model specified and no default_models.text_to_speech configured.");
+            }
 
             if (responseFormat === "mp3") {
-                const binary = await requestBinary(
-                    config,
-                    "/v1/audio/speech",
-                    {
-                        model: selectedModel,
-                        input,
-                    },
-                    {
-                        response_format: "mp3",
-                    },
-                );
+                const binary = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
+                    return await requestBinary(
+                        config,
+                        "/v1/audio/speech",
+                        {
+                            model: selectedModel,
+                            input,
+                        },
+                        {
+                            response_format: "mp3",
+                        },
+                    );
+                });
 
                 return {
-                    content: [{ type: "text", text: toPrettyJson({ model: selectedModel, contentType: binary.contentType, audioBase64: binary.base64, format: "mp3" }) }],
+                    content: [{ type: "text", text: toPrettyJson({ contentType: binary.contentType, audioBase64: binary.base64, format: "mp3" }) }],
                 };
             }
 
-            const payload = await requestJson(config, "/v1/audio/speech", {
-                model: selectedModel,
-                input,
-            }, {
-                response_format: "json",
+            const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
+                return await requestJson(config, "/v1/audio/speech", {
+                    model: selectedModel,
+                    input,
+                }, {
+                    response_format: "json",
+                });
             });
 
             return {
@@ -103,7 +123,7 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
     );
 
     server.registerTool(
-        "ninerouter_speech_to_text",
+        "speech_to_text",
         {
             description: "Transcribe audio through 9Router using a local file path or a base64 payload.",
             inputSchema: z.object({
@@ -121,30 +141,39 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
             }),
         },
         async ({ model, provider, audioPath, audioBase64, fileName, language, prompt, responseFormat, temperature }) => {
-            const selectedModel = pickModel(model, provider);
-            const formData = new FormData();
-            formData.append("model", selectedModel);
+            const userModel = model ?? provider;
+            const defaultModels = config.defaultModels?.speechToText ?? [];
+            const modelsToTry = userModel ? [userModel] : defaultModels;
 
-            if (audioPath) {
-                const blob = await createFileBlob(audioPath);
-                formData.append("file", blob, fileName ?? fileNameFromPath(audioPath));
-            } else if (audioBase64) {
-                const blob = new Blob([Buffer.from(audioBase64, "base64")]);
-                formData.append("file", blob, fileName ?? "audio.bin");
+            if (modelsToTry.length === 0) {
+                throw new Error("No model specified and no default_models.speech_to_text configured.");
             }
 
-            if (language) {
-                formData.append("language", language);
-            }
-            if (prompt) {
-                formData.append("prompt", prompt);
-            }
-            if (temperature !== undefined) {
-                formData.append("temperature", String(temperature));
-            }
+            const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
+                const formData = new FormData();
+                formData.append("model", selectedModel);
 
-            const payload = await requestMultipartText(config, "/v1/audio/transcriptions", formData, {
-                response_format: responseFormat,
+                if (audioPath) {
+                    const blob = await createFileBlob(audioPath);
+                    formData.append("file", blob, fileName ?? fileNameFromPath(audioPath));
+                } else if (audioBase64) {
+                    const blob = new Blob([Buffer.from(audioBase64, "base64")]);
+                    formData.append("file", blob, fileName ?? "audio.bin");
+                }
+
+                if (language) {
+                    formData.append("language", language);
+                }
+                if (prompt) {
+                    formData.append("prompt", prompt);
+                }
+                if (temperature !== undefined) {
+                    formData.append("temperature", String(temperature));
+                }
+
+                return await requestMultipartText(config, "/v1/audio/transcriptions", formData, {
+                    response_format: responseFormat,
+                });
             });
 
             return {

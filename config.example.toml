@@ -1,0 +1,34 @@
+# Example configuration for ninerouter-mcp
+# Copy this to ~/.config/ninerouter-mcp/config.toml and customize
+
+# 9Router base URL (required)
+base_url = "http://localhost:20128"
+
+# Optional API key (if your 9Router instance requires auth)
+# api_key = "sk-your-key-here"
+
+# Default models for each tool (optional)
+# Can be a single string or array of strings for fallback
+# If user doesn't specify a model, these will be tried in order
+[default_models]
+
+# Web search - tries tavily first, falls back to brave if tavily fails
+web_search = ["tavily/search", "brave-search/search"]
+
+# Or use single string for just one default
+# web_search = "tavily/search"
+
+# Web fetch - tries firecrawl first, then jina-reader
+web_fetch = ["firecrawl/fetch", "jina-reader/fetch"]
+
+# Image generation
+generate_image = "openai/dall-e-3"
+
+# Text to speech
+text_to_speech = "openai/tts-1"
+
+# Speech to text - tries openai whisper, falls back to groq
+speech_to_text = ["openai/whisper-1", "groq/whisper-large-v3-turbo"]
+
+# Embeddings
+embeddings = "openai/text-embedding-3-small"

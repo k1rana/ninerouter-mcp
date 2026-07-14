@@ -1,11 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
 import { type NinerouterConfig, requestJson } from "../ninerouter-client.js";
-import { pickModel, toPrettyJson } from "./common.js";
+import { pickModel, toPrettyJson, tryModelsWithFallback } from "./common.js";
 
 export function registerWebTools(server: McpServer, config: NinerouterConfig): void {
     server.registerTool(
-        "ninerouter_web_search",
+        "web_search",
         {
             description: "Search the web through 9Router and return the raw search payload.",
             inputSchema: z.object({
@@ -21,15 +21,25 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
             }),
         },
         async ({ query, model, provider, maxResults, searchType, country, language, timeRange, domainFilter }) => {
-            const payload = await requestJson(config, "/v1/search", {
-                model: pickModel(model, provider),
-                query,
-                max_results: maxResults,
-                search_type: searchType,
-                country,
-                language,
-                time_range: timeRange,
-                domain_filter: domainFilter,
+            const userModel = model ?? provider;
+            const defaultModels = config.defaultModels?.webSearch ?? [];
+            const modelsToTry = userModel ? [userModel] : defaultModels;
+
+            if (modelsToTry.length === 0) {
+                throw new Error("No model specified and no default_models.web_search configured.");
+            }
+
+            const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
+                return await requestJson(config, "/v1/search", {
+                    model: selectedModel,
+                    query,
+                    max_results: maxResults,
+                    search_type: searchType,
+                    country,
+                    language,
+                    time_range: timeRange,
+                    domain_filter: domainFilter,
+                });
             });
 
             return {
@@ -39,7 +49,7 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
     );
 
     server.registerTool(
-        "ninerouter_web_fetch",
+        "web_fetch",
         {
             description: "Fetch a URL through 9Router and return markdown, text, or HTML extraction output.",
             inputSchema: z.object({
@@ -51,11 +61,21 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
             }),
         },
         async ({ url, model, provider, format, maxCharacters }) => {
-            const payload = await requestJson(config, "/v1/web/fetch", {
-                model: pickModel(model, provider),
-                url,
-                format,
-                max_characters: maxCharacters,
+            const userModel = model ?? provider;
+            const defaultModels = config.defaultModels?.webFetch ?? [];
+            const modelsToTry = userModel ? [userModel] : defaultModels;
+
+            if (modelsToTry.length === 0) {
+                throw new Error("No model specified and no default_models.web_fetch configured.");
+            }
+
+            const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
+                return await requestJson(config, "/v1/web/fetch", {
+                    model: selectedModel,
+                    url,
+                    format,
+                    max_characters: maxCharacters,
+                });
             });
 
             return {

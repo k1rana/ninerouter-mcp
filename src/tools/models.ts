@@ -14,7 +14,7 @@ type ModelListResponse = {
 
 export function registerModelTools(server: McpServer, config: NinerouterConfig): void {
     server.registerTool(
-        "ninerouter_list_models",
+        "list_models",
         {
             description: "List available 9Router models. Call this first to choose a valid model id before using any other 9Router tool.",
             inputSchema: z.object({

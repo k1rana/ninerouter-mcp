@@ -1,11 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod/v4";
 import { type NinerouterConfig, requestJson } from "../ninerouter-client.js";
-import { pickModel, toPrettyJson } from "./common.js";
+import { pickModel, toPrettyJson, tryModelsWithFallback } from "./common.js";
 
 export function registerEmbeddingTools(server: McpServer, config: NinerouterConfig): void {
     server.registerTool(
-        "ninerouter_embeddings",
+        "embeddings",
         {
             description: "Generate embeddings through 9Router and return the raw embedding payload.",
             inputSchema: z.object({
@@ -17,11 +17,21 @@ export function registerEmbeddingTools(server: McpServer, config: NinerouterConf
             }),
         },
         async ({ model, provider, input, encodingFormat, dimensions }) => {
-            const payload = await requestJson(config, "/v1/embeddings", {
-                model: pickModel(model, provider),
-                input,
-                encoding_format: encodingFormat,
-                dimensions,
+            const userModel = model ?? provider;
+            const defaultModels = config.defaultModels?.embeddings ?? [];
+            const modelsToTry = userModel ? [userModel] : defaultModels;
+
+            if (modelsToTry.length === 0) {
+                throw new Error("No model specified and no default_models.embeddings configured.");
+            }
+
+            const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
+                return await requestJson(config, "/v1/embeddings", {
+                    model: selectedModel,
+                    input,
+                    encoding_format: encodingFormat,
+                    dimensions,
+                });
             });
 
             return {

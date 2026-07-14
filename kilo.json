@@ -1,0 +1,13 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "mcp": {
+    "ninerouter": {
+      "type": "local",
+      "command": ["node", "dist/index.js"],
+      "environment": {
+        "NINEROUTER_URL": "http://localhost:20128"
+      },
+      "enabled": true
+    }
+  }
+}

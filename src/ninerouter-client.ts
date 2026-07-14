@@ -6,6 +6,14 @@ import { parse as parseToml } from "@iarna/toml";
 export type NinerouterConfig = {
     baseUrl: string;
     apiKey?: string;
+    defaultModels?: {
+        webSearch?: string[];
+        webFetch?: string[];
+        generateImage?: string[];
+        textToSpeech?: string[];
+        speechToText?: string[];
+        embeddings?: string[];
+    };
 };
 
 export type NinerouterConfigFile = {
@@ -15,13 +23,21 @@ export type NinerouterConfigFile = {
         base_url?: string;
         api_key?: string;
     };
+    default_models?: {
+        web_search?: string | string[];
+        web_fetch?: string | string[];
+        generate_image?: string | string[];
+        text_to_speech?: string | string[];
+        speech_to_text?: string | string[];
+        embeddings?: string | string[];
+    };
 };
 
 export type NinerouterConfigOptions = {
     configPath?: string;
 };
 
-const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".config", "9router-mcp", "config.toml");
+const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".config", "ninerouter-mcp", "config.toml");
 
 export function getDefaultConfigPath(): string {
     return DEFAULT_CONFIG_PATH;
@@ -88,9 +104,25 @@ export async function getConfig(options: NinerouterConfigOptions = {}): Promise<
 
     const apiKey = apiKeyFromFile ?? process.env.NINEROUTER_KEY?.trim();
 
+    // Convert snake_case to camelCase and normalize string to array
+    const normalizeToArray = (value: string | string[] | undefined): string[] | undefined => {
+        if (!value) return undefined;
+        return Array.isArray(value) ? value : [value];
+    };
+
+    const defaultModels = configFile?.default_models ? {
+        webSearch: normalizeToArray(configFile.default_models.web_search),
+        webFetch: normalizeToArray(configFile.default_models.web_fetch),
+        generateImage: normalizeToArray(configFile.default_models.generate_image),
+        textToSpeech: normalizeToArray(configFile.default_models.text_to_speech),
+        speechToText: normalizeToArray(configFile.default_models.speech_to_text),
+        embeddings: normalizeToArray(configFile.default_models.embeddings),
+    } : undefined;
+
     return {
         baseUrl: normalizeBaseUrl(baseUrl),
         apiKey: apiKey ? apiKey : undefined,
+        defaultModels,
     };
 }
 
