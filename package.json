@@ -3,12 +3,36 @@
     "version": "1.0.0",
     "type": "module",
     "description": "MCP server for 9Router with model discovery, automatic fallback, and type-safe validation",
+    "license": "Apache-2.0",
+    "author": "Farhan Brillan Widyakirana <https://tojoo.dev>",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/k1rana/ninerouter-mcp.git"
+    },
+    "keywords": [
+        "9router",
+        "mcp",
+        "model-context-protocol",
+        "ai",
+        "llm",
+        "tools",
+        "web-search",
+        "embeddings",
+        "tts",
+        "stt",
+        "image-generation"
+    ],
+    "homepage": "https://github.com/k1rana/ninerouter-mcp#readme",
+    "bugs": {
+        "url": "https://github.com/k1rana/ninerouter-mcp/issues"
+    },
     "files": [
         "dist",
-        "README.md"
+        "README.md",
+        "LICENSE"
     ],
     "bin": {
-        "ninerouter-mcp": "./dist/index.js"
+        "ninerouter-mcp": "dist/index.js"
     },
     "scripts": {
         "build": "tsc -p tsconfig.json",
