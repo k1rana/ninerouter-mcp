@@ -40,20 +40,42 @@
         "start": "node dist/index.js",
         "dev": "tsx watch src/index.ts",
         "create-config": "tsx src/create-config.ts",
-        "release": "semantic-release"
+        "release": "semantic-release",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "typecheck": "tsc --noEmit",
+        "check": "npm run typecheck && npm run lint && npm run format:check",
+        "prepare": "husky"
     },
     "dependencies": {
-        "@modelcontextprotocol/server": "^2.0.0-beta.2",
+        "@modelcontextprotocol/server": "^2.0.0-beta.4",
         "@iarna/toml": "^2.2.5",
-        "zod": "^4.0.0"
+        "zod": "^4.4.3"
     },
     "devDependencies": {
-        "@types/node": "^22.0.0",
-        "tsx": "^4.19.0",
-        "typescript": "^5.6.0",
-        "semantic-release": "^25.0.0",
+        "@types/node": "^22.20.0",
+        "tsx": "^4.23.1",
+        "typescript": "^6.0.3",
+        "semantic-release": "^25.0.7",
         "@semantic-release/changelog": "^6.0.3",
         "@semantic-release/git": "^10.0.1",
-        "@semantic-release/npm": "^13.1.0"
+        "@semantic-release/npm": "^13.1.5",
+        "eslint": "^10.7.0",
+        "@eslint/js": "^10.0.1",
+        "typescript-eslint": "^8.64.0",
+        "prettier": "^3.9.5",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.0.0"
+    },
+    "lint-staged": {
+        "*.{ts,tsx,js,cjs,mjs}": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "*.{json,md,yml,yaml}": [
+            "prettier --write"
+        ]
     }
 }
