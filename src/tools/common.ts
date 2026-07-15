@@ -1,7 +1,7 @@
 export function pickModel(model?: string, provider?: string): string {
     const selected = model ?? provider;
     if (!selected) {
-        throw new Error("Provide either model or provider.");
+        throw new Error('Provide either model or provider.');
     }
 
     return selected;
@@ -33,6 +33,6 @@ export async function tryModelsWithFallback<T>(
         }
     }
 
-    const errorSummary = errors.map((e) => `${e.model}: ${e.error}`).join("; ");
+    const errorSummary = errors.map((e) => `${e.model}: ${e.error}`).join('; ');
     throw new Error(`All models failed. Errors: ${errorSummary}`);
 }

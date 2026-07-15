@@ -7,6 +7,7 @@ MCP server for 9Router with model discovery, automatic fallback, and type-safe v
 9Router already hides provider-specific complexity behind a single API. This project exposes that API through MCP so clients can use 9Router capabilities directly as native tools.
 
 **Benefits over skill-based approaches:**
+
 - No repeated skill file loading (saves tokens and reduces context usage)
 - Tools are always available without manual skill invocation
 - Automatic model fallback when primary models fail
@@ -43,16 +44,16 @@ Add to your `kilo.json`:
 
 ```json
 {
-  "mcp": {
-    "ninerouter": {
-      "type": "local",
-      "command": ["npx", "-y", "ninerouter-mcp"],
-      "environment": {
-        "NINEROUTER_URL": "http://localhost:20128"
-      },
-      "enabled": true
+    "mcp": {
+        "ninerouter": {
+            "type": "local",
+            "command": ["npx", "-y", "ninerouter-mcp"],
+            "environment": {
+                "NINEROUTER_URL": "http://localhost:20128"
+            },
+            "enabled": true
+        }
     }
-  }
 }
 ```
 
@@ -88,28 +89,28 @@ This creates `~/.config/ninerouter-mcp/config.toml` with sample configuration. E
 
 1. Install dependencies:
 
-   ```bash
-   npm install
-   ```
+    ```bash
+    npm install
+    ```
 
 2. Configure the 9Router endpoint:
 
-   ```bash
-   set NINEROUTER_URL=http://localhost:20128
-   set NINEROUTER_KEY=sk-...
-   ```
+    ```bash
+    set NINEROUTER_URL=http://localhost:20128
+    set NINEROUTER_KEY=sk-...
+    ```
 
-   `NINEROUTER_KEY` is optional when your 9Router instance does not require auth.
+    `NINEROUTER_KEY` is optional when your 9Router instance does not require auth.
 
     You can also use a config file at `~/.config/ninerouter-mcp/config.toml`.
     TOML settings override environment variables.
 
-   Example:
+    Example:
 
     ```toml
     base_url = "http://localhost:20128"
     api_key = "sk-..."
-    
+
     # Optional: default models with fallback support
     [default_models]
     web_search = ["tavily/search", "brave-search/search"]
@@ -119,26 +120,26 @@ This creates `~/.config/ninerouter-mcp/config.toml` with sample configuration. E
     speech_to_text = ["openai/whisper-1", "groq/whisper-large-v3-turbo"]
     embeddings = "openai/text-embedding-3-small"
     ```
-    
+
     Default models can be a single string or array of strings. When array, models are tried in order until one succeeds. If all fail, errors are aggregated.
 
     To pass a different config file at startup, use `--config`:
 
-   ```bash
-   npm start -- --config D:\path\to\config.toml
-   ```
+    ```bash
+    npm start -- --config D:\path\to\config.toml
+    ```
 
 3. Build the server:
 
-   ```bash
-   npm run build
-   ```
+    ```bash
+    npm run build
+    ```
 
 4. Start the MCP server over stdio:
 
-   ```bash
-   npm start
-   ```
+    ```bash
+    npm start
+    ```
 
 ## Run
 

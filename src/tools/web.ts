@@ -1,36 +1,54 @@
-import { McpServer } from "@modelcontextprotocol/server";
-import { z } from "zod/v4";
-import { type NinerouterConfig, requestJson } from "../ninerouter-client.js";
-import { pickModel, toPrettyJson, tryModelsWithFallback } from "./common.js";
+import { McpServer } from '@modelcontextprotocol/server';
+import { z } from 'zod/v4';
+import { type NinerouterConfig, requestJson } from '../ninerouter-client.js';
+import { pickModel, toPrettyJson, tryModelsWithFallback } from './common.js';
 
 export function registerWebTools(server: McpServer, config: NinerouterConfig): void {
     server.registerTool(
-        "web_search",
+        'web_search',
         {
-            description: "Search the web through 9Router and return the raw search payload.",
+            description: 'Search the web through 9Router and return the raw search payload.',
             inputSchema: z.object({
-                query: z.string().min(1).describe("Search query to send to 9Router."),
-                model: z.string().optional().describe("9Router web-search model id, for example tavily/search or brave-search/search."),
-                provider: z.string().optional().describe("Alias for model; accepted for compatibility with 9Router docs."),
+                query: z.string().min(1).describe('Search query to send to 9Router.'),
+                model: z
+                    .string()
+                    .optional()
+                    .describe(
+                        '9Router web-search model id, for example tavily/search or brave-search/search.',
+                    ),
+                provider: z
+                    .string()
+                    .optional()
+                    .describe('Alias for model; accepted for compatibility with 9Router docs.'),
                 maxResults: z.number().int().positive().max(20).optional().default(5),
-                searchType: z.enum(["web", "news"]).optional().default("web"),
+                searchType: z.enum(['web', 'news']).optional().default('web'),
                 country: z.string().optional(),
                 language: z.string().optional(),
                 timeRange: z.string().optional(),
                 domainFilter: z.string().optional(),
             }),
         },
-        async ({ query, model, provider, maxResults, searchType, country, language, timeRange, domainFilter }) => {
+        async ({
+            query,
+            model,
+            provider,
+            maxResults,
+            searchType,
+            country,
+            language,
+            timeRange,
+            domainFilter,
+        }) => {
             const userModel = model ?? provider;
             const defaultModels = config.defaultModels?.webSearch ?? [];
             const modelsToTry = userModel ? [userModel] : defaultModels;
 
             if (modelsToTry.length === 0) {
-                throw new Error("No model specified and no default_models.web_search configured.");
+                throw new Error('No model specified and no default_models.web_search configured.');
             }
 
             const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
-                return await requestJson(config, "/v1/search", {
+                return await requestJson(config, '/v1/search', {
                     model: selectedModel,
                     query,
                     max_results: maxResults,
@@ -43,20 +61,29 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
             });
 
             return {
-                content: [{ type: "text", text: toPrettyJson(payload) }],
+                content: [{ type: 'text', text: toPrettyJson(payload) }],
             };
         },
     );
 
     server.registerTool(
-        "web_fetch",
+        'web_fetch',
         {
-            description: "Fetch a URL through 9Router and return markdown, text, or HTML extraction output.",
+            description:
+                'Fetch a URL through 9Router and return markdown, text, or HTML extraction output.',
             inputSchema: z.object({
-                url: z.string().url().describe("URL to fetch and extract."),
-                model: z.string().optional().describe("9Router web-fetch model id, for example jina-reader/fetch or firecrawl/fetch."),
-                provider: z.string().optional().describe("Alias for model; accepted for compatibility with 9Router docs."),
-                format: z.enum(["markdown", "text", "html"]).optional().default("markdown"),
+                url: z.string().url().describe('URL to fetch and extract.'),
+                model: z
+                    .string()
+                    .optional()
+                    .describe(
+                        '9Router web-fetch model id, for example jina-reader/fetch or firecrawl/fetch.',
+                    ),
+                provider: z
+                    .string()
+                    .optional()
+                    .describe('Alias for model; accepted for compatibility with 9Router docs.'),
+                format: z.enum(['markdown', 'text', 'html']).optional().default('markdown'),
                 maxCharacters: z.number().int().nonnegative().optional().default(8000),
             }),
         },
@@ -66,11 +93,11 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
             const modelsToTry = userModel ? [userModel] : defaultModels;
 
             if (modelsToTry.length === 0) {
-                throw new Error("No model specified and no default_models.web_fetch configured.");
+                throw new Error('No model specified and no default_models.web_fetch configured.');
             }
 
             const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
-                return await requestJson(config, "/v1/web/fetch", {
+                return await requestJson(config, '/v1/web/fetch', {
                     model: selectedModel,
                     url,
                     format,
@@ -79,7 +106,7 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
             });
 
             return {
-                content: [{ type: "text", text: toPrettyJson(payload) }],
+                content: [{ type: 'text', text: toPrettyJson(payload) }],
             };
         },
     );

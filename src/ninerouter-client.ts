@@ -1,7 +1,7 @@
-import { access, readFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { parse as parseToml } from "@iarna/toml";
+import { access, readFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { parse as parseToml } from '@iarna/toml';
 
 export type NinerouterConfig = {
     baseUrl: string;
@@ -37,7 +37,7 @@ export type NinerouterConfigOptions = {
     configPath?: string;
 };
 
-const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".config", "ninerouter-mcp", "config.toml");
+const DEFAULT_CONFIG_PATH = path.join(os.homedir(), '.config', 'ninerouter-mcp', 'config.toml');
 
 export function getDefaultConfigPath(): string {
     return DEFAULT_CONFIG_PATH;
@@ -46,7 +46,7 @@ export function getDefaultConfigPath(): string {
 export function resolveConfigPath(argv: string[]): string | undefined {
     for (let index = 2; index < argv.length; index += 1) {
         const argument = argv[index];
-        if (argument === "--config" || argument === "--config-file" || argument === "-c") {
+        if (argument === '--config' || argument === '--config-file' || argument === '-c') {
             const nextValue = argv[index + 1];
             if (!nextValue) {
                 throw new Error(`Missing value for ${argument}.`);
@@ -54,8 +54,8 @@ export function resolveConfigPath(argv: string[]): string | undefined {
             return nextValue;
         }
 
-        if (argument.startsWith("--config=") || argument.startsWith("--config-file=")) {
-            return argument.slice(argument.indexOf("=") + 1);
+        if (argument.startsWith('--config=') || argument.startsWith('--config-file=')) {
+            return argument.slice(argument.indexOf('=') + 1);
         }
     }
 
@@ -63,17 +63,20 @@ export function resolveConfigPath(argv: string[]): string | undefined {
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
-    return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+    return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 }
 
-function pickConfigValue(configFile: NinerouterConfigFile, key: "base_url" | "api_key"): string | undefined {
+function pickConfigValue(
+    configFile: NinerouterConfigFile,
+    key: 'base_url' | 'api_key',
+): string | undefined {
     const nestedValue = configFile.ninerouter?.[key];
-    if (typeof nestedValue === "string" && nestedValue.trim()) {
+    if (typeof nestedValue === 'string' && nestedValue.trim()) {
         return nestedValue.trim();
     }
 
     const topLevelValue = configFile[key];
-    if (typeof topLevelValue === "string" && topLevelValue.trim()) {
+    if (typeof topLevelValue === 'string' && topLevelValue.trim()) {
         return topLevelValue.trim();
     }
 
@@ -87,19 +90,21 @@ async function loadConfigFile(configPath: string): Promise<NinerouterConfigFile 
         return null;
     }
 
-    const raw = await readFile(configPath, "utf8");
+    const raw = await readFile(configPath, 'utf8');
     const parsed = parseToml(raw);
     return parsed as NinerouterConfigFile;
 }
 
 export async function getConfig(options: NinerouterConfigOptions = {}): Promise<NinerouterConfig> {
     const configFile = await loadConfigFile(options.configPath ?? DEFAULT_CONFIG_PATH);
-    const baseUrlFromFile = configFile ? pickConfigValue(configFile, "base_url") : undefined;
-    const apiKeyFromFile = configFile ? pickConfigValue(configFile, "api_key") : undefined;
+    const baseUrlFromFile = configFile ? pickConfigValue(configFile, 'base_url') : undefined;
+    const apiKeyFromFile = configFile ? pickConfigValue(configFile, 'api_key') : undefined;
 
     const baseUrl = baseUrlFromFile ?? process.env.NINEROUTER_URL;
     if (!baseUrl) {
-        throw new Error(`NINEROUTER_URL is required. Set it in ${options.configPath ?? DEFAULT_CONFIG_PATH} or as an environment variable.`);
+        throw new Error(
+            `NINEROUTER_URL is required. Set it in ${options.configPath ?? DEFAULT_CONFIG_PATH} or as an environment variable.`,
+        );
     }
 
     const apiKey = apiKeyFromFile ?? process.env.NINEROUTER_KEY?.trim();
@@ -110,14 +115,16 @@ export async function getConfig(options: NinerouterConfigOptions = {}): Promise<
         return Array.isArray(value) ? value : [value];
     };
 
-    const defaultModels = configFile?.default_models ? {
-        webSearch: normalizeToArray(configFile.default_models.web_search),
-        webFetch: normalizeToArray(configFile.default_models.web_fetch),
-        generateImage: normalizeToArray(configFile.default_models.generate_image),
-        textToSpeech: normalizeToArray(configFile.default_models.text_to_speech),
-        speechToText: normalizeToArray(configFile.default_models.speech_to_text),
-        embeddings: normalizeToArray(configFile.default_models.embeddings),
-    } : undefined;
+    const defaultModels = configFile?.default_models
+        ? {
+              webSearch: normalizeToArray(configFile.default_models.web_search),
+              webFetch: normalizeToArray(configFile.default_models.web_fetch),
+              generateImage: normalizeToArray(configFile.default_models.generate_image),
+              textToSpeech: normalizeToArray(configFile.default_models.text_to_speech),
+              speechToText: normalizeToArray(configFile.default_models.speech_to_text),
+              embeddings: normalizeToArray(configFile.default_models.embeddings),
+          }
+        : undefined;
 
     return {
         baseUrl: normalizeBaseUrl(baseUrl),
@@ -126,8 +133,12 @@ export async function getConfig(options: NinerouterConfigOptions = {}): Promise<
     };
 }
 
-function buildUrl(baseUrl: string, pathname: string, query?: Record<string, string | number | boolean | undefined>): URL {
-    const url = new URL(pathname.replace(/^\//, ""), baseUrl);
+function buildUrl(
+    baseUrl: string,
+    pathname: string,
+    query?: Record<string, string | number | boolean | undefined>,
+): URL {
+    const url = new URL(pathname.replace(/^\//, ''), baseUrl);
 
     for (const [key, value] of Object.entries(query ?? {})) {
         if (value === undefined) {
@@ -151,15 +162,15 @@ async function readErrorMessage(response: Response): Promise<string> {
 
     try {
         const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
-        if (typeof parsed.message === "string") {
+        if (typeof parsed.message === 'string') {
             return parsed.message;
         }
-        if (typeof parsed.error === "string") {
+        if (typeof parsed.error === 'string') {
             return parsed.error;
         }
-        if (parsed.error && typeof parsed.error === "object" && "message" in parsed.error) {
+        if (parsed.error && typeof parsed.error === 'object' && 'message' in parsed.error) {
             const message = (parsed.error as { message?: unknown }).message;
-            if (typeof message === "string") {
+            if (typeof message === 'string') {
                 return message;
             }
         }
@@ -187,9 +198,9 @@ export async function requestJson<TResponse>(
     query?: Record<string, string | number | boolean | undefined>,
 ): Promise<TResponse> {
     const response = await fetch(buildUrl(config.baseUrl, pathname, query), {
-        method: "POST",
+        method: 'POST',
         headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             ...authHeaders(config.apiKey),
         },
         body: JSON.stringify(body),
@@ -205,7 +216,7 @@ export async function requestGetJson<TResponse>(
     query?: Record<string, string | number | boolean | undefined>,
 ): Promise<TResponse> {
     const response = await fetch(buildUrl(config.baseUrl, pathname, query), {
-        method: "GET",
+        method: 'GET',
         headers: {
             ...authHeaders(config.apiKey),
         },
@@ -222,9 +233,9 @@ export async function requestBinary(
     query?: Record<string, string | number | boolean | undefined>,
 ): Promise<{ base64: string; contentType: string | null }> {
     const response = await fetch(buildUrl(config.baseUrl, pathname, query), {
-        method: "POST",
+        method: 'POST',
         headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             ...authHeaders(config.apiKey),
         },
         body: JSON.stringify(body),
@@ -233,8 +244,8 @@ export async function requestBinary(
     await ensureOk(response, pathname);
     const buffer = Buffer.from(await response.arrayBuffer());
     return {
-        base64: buffer.toString("base64"),
-        contentType: response.headers.get("content-type"),
+        base64: buffer.toString('base64'),
+        contentType: response.headers.get('content-type'),
     };
 }
 
@@ -245,7 +256,7 @@ export async function requestMultipartText(
     query?: Record<string, string | number | boolean | undefined>,
 ): Promise<{ text: string; contentType: string | null }> {
     const response = await fetch(buildUrl(config.baseUrl, pathname, query), {
-        method: "POST",
+        method: 'POST',
         headers: {
             ...authHeaders(config.apiKey),
         },
@@ -255,7 +266,7 @@ export async function requestMultipartText(
     await ensureOk(response, pathname);
     return {
         text: await response.text(),
-        contentType: response.headers.get("content-type"),
+        contentType: response.headers.get('content-type'),
     };
 }
 
