@@ -2,3 +2,8 @@
 node_modules
 dist
 *.tsbuildinfo
+.tmp
+.env
+.env.*
+!.env.example
+kilo.json
