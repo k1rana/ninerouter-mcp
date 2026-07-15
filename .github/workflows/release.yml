@@ -2,6 +2,17 @@ name: Release
 
 on:
     workflow_dispatch:
+        inputs:
+            release_type:
+                description: 'Release type (auto = follow conventional commits)'
+                type: choice
+                required: true
+                default: 'auto'
+                options:
+                    - auto
+                    - major
+                    - minor
+                    - patch
 
 permissions:
     contents: read
@@ -56,4 +67,5 @@ jobs:
             - name: Release
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  RELEASE_TYPE: ${{ inputs.release_type }}
               run: npx semantic-release
