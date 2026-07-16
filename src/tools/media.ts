@@ -8,26 +8,23 @@ import {
     requestJson,
     requestMultipartText,
 } from '../ninerouter-client.js';
-import { pickModel, toPrettyJson, tryModelsWithFallback } from './common.js';
+import { tryModelsWithFallback, toPrettyJson } from './common.js';
 
 export function registerMediaTools(server: McpServer, config: NinerouterConfig): void {
     server.registerTool(
         'generate_image',
         {
             description:
-                'Generate an image through 9Router and return the upstream response as JSON or base64.',
+                'Generate an image from a text prompt. Returns the raw upstream payload as JSON: a `data` array of URLs by default, base64 image data when `responseFormat: "b64_json"`, or `{ contentType, base64 }` when `responseFormat: "binary"`. Pass `model` (alias `provider`) to pick a backend (e.g. `openai/dall-e-3`, `gemini/gemini-3-pro-image-preview`); otherwise the configured `default_models.generate_image` fallback chain is tried in order.',
             inputSchema: z.object({
                 prompt: z.string().min(1).describe('Image prompt.'),
                 model: z
                     .string()
                     .optional()
                     .describe(
-                        '9Router image model id, for example gemini/gemini-3-pro-image-preview or openai/dall-e-3.',
+                        'Image model id, for example gemini/gemini-3-pro-image-preview or openai/dall-e-3.',
                     ),
-                provider: z
-                    .string()
-                    .optional()
-                    .describe('Alias for model; accepted for compatibility with 9Router docs.'),
+                provider: z.string().optional().describe('Alias for model.'),
                 n: z.number().int().positive().max(10).optional().default(1),
                 size: z.string().optional().default('1024x1024'),
                 quality: z.enum(['standard', 'hd']).optional(),
@@ -96,19 +93,17 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
     server.registerTool(
         'text_to_speech',
         {
-            description: 'Convert text to speech through 9Router and return base64-encoded audio.',
+            description:
+                'Convert text to speech. Returns the raw upstream payload as JSON by default, or `{ contentType, audioBase64, format: "mp3" }` when `responseFormat: "mp3"`. Pass `model` (alias `provider`) to pick a voice or TTS model (e.g. `openai/tts-1`, `edge-tts/vi-VN-HoaiMyNeural`); otherwise the configured `default_models.text_to_speech` fallback chain is tried in order.',
             inputSchema: z.object({
                 input: z.string().min(1).describe('Text to synthesize.'),
                 model: z
                     .string()
                     .optional()
                     .describe(
-                        '9Router TTS model or voice id, for example openai/tts-1 or edge-tts/vi-VN-HoaiMyNeural.',
+                        'TTS model or voice id, for example openai/tts-1 or edge-tts/vi-VN-HoaiMyNeural.',
                     ),
-                provider: z
-                    .string()
-                    .optional()
-                    .describe('Alias for model; accepted for compatibility with 9Router docs.'),
+                provider: z.string().optional().describe('Alias for model.'),
                 responseFormat: z.enum(['json', 'mp3']).optional().default('json'),
             }),
         },
@@ -176,19 +171,16 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
         'speech_to_text',
         {
             description:
-                'Transcribe audio through 9Router using a local file path or a base64 payload.',
+                'Transcribe audio. Provide exactly one of `audioPath` (local file) or `audioBase64` (base64 payload); both are sent as multipart upload. `responseFormat` selects the output shape (`json`, `text`, `verbose_json`, `srt`, `vtt`). Pass `model` (alias `provider`) to pick a transcriber (e.g. `openai/whisper-1`, `groq/whisper-large-v3-turbo`); otherwise the configured `default_models.speech_to_text` fallback chain is tried in order.',
             inputSchema: z
                 .object({
                     model: z
                         .string()
                         .optional()
                         .describe(
-                            '9Router STT model id, for example openai/whisper-1 or groq/whisper-large-v3-turbo.',
+                            'STT model id, for example openai/whisper-1 or groq/whisper-large-v3-turbo.',
                         ),
-                    provider: z
-                        .string()
-                        .optional()
-                        .describe('Alias for model; accepted for compatibility with 9Router docs.'),
+                    provider: z.string().optional().describe('Alias for model.'),
                     audioPath: z.string().optional().describe('Local path to an audio file.'),
                     audioBase64: z.string().optional().describe('Base64-encoded audio payload.'),
                     fileName: z
