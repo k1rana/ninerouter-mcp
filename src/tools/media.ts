@@ -1,3 +1,6 @@
+import { writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 import {
@@ -10,12 +13,43 @@ import {
 } from '../ninerouter-client.js';
 import { tryModelsWithFallback, toPrettyJson } from './common.js';
 
+function defaultOutputPath(prefix: string, ext: string): string {
+    const safe =
+        prefix
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 40) || 'output';
+    return path.join(os.tmpdir(), `ninerouter-${safe}-${Date.now()}${ext}`);
+}
+
+function extFromContentType(contentType: string | null, fallback: string): string {
+    if (!contentType) return fallback;
+    const map: Record<string, string> = {
+        'image/png': '.png',
+        'image/jpeg': '.jpg',
+        'image/jpg': '.jpg',
+        'image/webp': '.webp',
+        'image/gif': '.gif',
+        'image/svg+xml': '.svg',
+        'audio/mpeg': '.mp3',
+        'audio/mp3': '.mp3',
+        'audio/wav': '.wav',
+        'audio/x-wav': '.wav',
+        'audio/ogg': '.ogg',
+        'audio/webm': '.webm',
+        'audio/flac': '.flac',
+        'audio/aac': '.aac',
+    };
+    return map[contentType.split(';')[0].trim().toLowerCase()] ?? fallback;
+}
+
 export function registerMediaTools(server: McpServer, config: NinerouterConfig): void {
     server.registerTool(
         'generate_image',
         {
             description:
-                'Generate an image from a text prompt. Returns the raw upstream payload as JSON: a `data` array of URLs by default, base64 image data when `responseFormat: "b64_json"`, or `{ contentType, base64 }` when `responseFormat: "binary"`. Pass `model` (alias `provider`) to pick a backend (e.g. `openai/dall-e-3`, `gemini/gemini-3-pro-image-preview`); otherwise the configured `default_models.generate_image` fallback chain is tried in order.',
+                'Generate an image from a text prompt. Always writes the file and returns the image as a base64 content block plus `{ outputPath, bytes, contentType }`. Omit `outputPath` to write to a temp file with extension auto-derived from upstream content-type (.png default).',
             inputSchema: z.object({
                 prompt: z.string().min(1).describe('Image prompt.'),
                 model: z
@@ -28,10 +62,15 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                 n: z.number().int().positive().max(10).optional().default(1),
                 size: z.string().optional().default('1024x1024'),
                 quality: z.enum(['standard', 'hd']).optional(),
-                responseFormat: z.enum(['url', 'b64_json', 'binary']).optional().default('url'),
+                outputPath: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Where to write the image. Default: temp dir, extension derived from upstream content-type.',
+                    ),
             }),
         },
-        async ({ prompt, model, provider, n, size, quality, responseFormat }) => {
+        async ({ prompt, model, provider, n, size, quality, outputPath }) => {
             const userModel = model ?? provider;
             const defaultModels = config.defaultModels?.generateImage ?? [];
             const modelsToTry = userModel ? [userModel] : defaultModels;
@@ -42,50 +81,48 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                 );
             }
 
-            if (responseFormat === 'binary') {
-                const binary = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
-                    return await requestBinary(
-                        config,
-                        '/v1/images/generations',
-                        {
-                            model: selectedModel,
-                            prompt,
-                            n,
-                            size,
-                            quality,
-                        },
-                        {
-                            response_format: 'binary',
-                        },
-                    );
-                });
-
-                return {
-                    content: [
-                        {
-                            type: 'text',
-                            text: toPrettyJson({
-                                contentType: binary.contentType,
-                                base64: binary.base64,
-                            }),
-                        },
-                    ],
-                };
-            }
-
-            const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
-                return await requestJson(config, '/v1/images/generations', {
+            const fetchImage = async (selectedModel: string) => {
+                const payload = (await requestJson(config, '/v1/images/generations', {
                     model: selectedModel,
                     prompt,
                     n,
                     size,
                     quality,
-                    response_format: responseFormat,
-                });
-            });
+                    response_format: 'b64_json',
+                })) as {
+                    data?: Array<{ b64_json?: string }>;
+                };
 
+                const first = payload.data?.[0];
+                const b64 = first?.b64_json;
+                if (!b64) {
+                    throw new Error('Image response contained no b64_json data.');
+                }
+                const bytes = Buffer.from(b64, 'base64');
+                const contentType = 'image/png';
+                return { bytes, contentType, b64 };
+            };
+
+            const result = await tryModelsWithFallback(modelsToTry, fetchImage);
+            const ext = extFromContentType(result.contentType, '.png');
+            const resolvedPath = outputPath ?? defaultOutputPath(prompt, ext);
+            await writeFile(resolvedPath, result.bytes);
             return {
-                content: [{ type: 'text', text: toPrettyJson(payload) }],
+                content: [
+                    {
+                        type: 'image',
+                        data: result.b64,
+                        mimeType: result.contentType ?? 'image/png',
+                    },
+                    {
+                        type: 'text',
+                        text: toPrettyJson({
+                            outputPath: resolvedPath,
+                            bytes: result.bytes.length,
+                            contentType: result.contentType,
+                        }),
+                    },
+                ],
             };
         },
     );
@@ -94,7 +131,7 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
         'text_to_speech',
         {
             description:
-                'Convert text to speech. Returns the raw upstream payload as JSON by default, or `{ contentType, audioBase64, format: "mp3" }` when `responseFormat: "mp3"`. Pass `model` (alias `provider`) to pick a voice or TTS model (e.g. `openai/tts-1`, `edge-tts/vi-VN-HoaiMyNeural`); otherwise the configured `default_models.text_to_speech` fallback chain is tried in order.',
+                'Convert text to speech. Always writes the audio file and returns `{ outputPath, bytes, contentType }`. Omit `outputPath` to write to a temp file as .mp3; pass a path to control location.',
             inputSchema: z.object({
                 input: z.string().min(1).describe('Text to synthesize.'),
                 model: z
@@ -104,10 +141,15 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                         'TTS model or voice id, for example openai/tts-1 or edge-tts/vi-VN-HoaiMyNeural.',
                     ),
                 provider: z.string().optional().describe('Alias for model.'),
-                responseFormat: z.enum(['json', 'mp3']).optional().default('json'),
+                outputPath: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Where to write the audio. Default: temp dir, extension derived from upstream content-type (.mp3 default).',
+                    ),
             }),
         },
-        async ({ input, model, provider, responseFormat }) => {
+        async ({ input, model, provider, outputPath }) => {
             const userModel = model ?? provider;
             const defaultModels = config.defaultModels?.textToSpeech ?? [];
             const modelsToTry = userModel ? [userModel] : defaultModels;
@@ -118,51 +160,40 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                 );
             }
 
-            if (responseFormat === 'mp3') {
-                const binary = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
-                    return await requestBinary(
-                        config,
-                        '/v1/audio/speech',
-                        {
-                            model: selectedModel,
-                            input,
-                        },
-                        {
-                            response_format: 'mp3',
-                        },
-                    );
-                });
-
-                return {
-                    content: [
-                        {
-                            type: 'text',
-                            text: toPrettyJson({
-                                contentType: binary.contentType,
-                                audioBase64: binary.base64,
-                                format: 'mp3',
-                            }),
-                        },
-                    ],
-                };
-            }
-
-            const payload = await tryModelsWithFallback(modelsToTry, async (selectedModel) => {
-                return await requestJson(
+            const fetchAudio = async (selectedModel: string) => {
+                const binary = await requestBinary(
                     config,
                     '/v1/audio/speech',
-                    {
-                        model: selectedModel,
-                        input,
-                    },
-                    {
-                        response_format: 'json',
-                    },
+                    { model: selectedModel, input },
+                    { response_format: 'mp3' },
                 );
-            });
+                return {
+                    bytes: Buffer.from(binary.base64, 'base64'),
+                    contentType: binary.contentType ?? 'audio/mpeg',
+                    b64: binary.base64,
+                };
+            };
 
+            const result = await tryModelsWithFallback(modelsToTry, fetchAudio);
+            const ext = extFromContentType(result.contentType, '.mp3');
+            const resolvedPath = outputPath ?? defaultOutputPath(input, ext);
+            await writeFile(resolvedPath, result.bytes);
             return {
-                content: [{ type: 'text', text: toPrettyJson(payload) }],
+                content: [
+                    {
+                        type: 'audio',
+                        data: result.b64,
+                        mimeType: result.contentType,
+                    },
+                    {
+                        type: 'text',
+                        text: toPrettyJson({
+                            outputPath: resolvedPath,
+                            bytes: result.bytes.length,
+                            contentType: result.contentType,
+                        }),
+                    },
+                ],
             };
         },
     );

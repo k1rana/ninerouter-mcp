@@ -207,28 +207,28 @@ Fetch a URL and return it as markdown, text, or HTML.
 
 ### `generate_image`
 
-Text-to-image generation.
+Text-to-image generation. Always writes a file and returns the image as a base64 content block plus `{ outputPath, bytes, contentType }`. Omit `outputPath` to write to the OS temp dir.
 
-| Parameter        | Type   | Default     | Notes                                                                       |
-| ---------------- | ------ | ----------- | --------------------------------------------------------------------------- |
-| `prompt`         | string | —           | Required.                                                                   |
-| `model`          | string | —           | e.g. `openai/dall-e-3`, `gemini/gemini-3-pro-image-preview`.                |
-| `provider`       | string | —           | Alias for `model`.                                                          |
-| `n`              | number | `1`         | 1–10.                                                                       |
-| `size`           | string | `1024x1024` |                                                                             |
-| `quality`        | string | —           | `standard` or `hd`.                                                         |
-| `responseFormat` | string | `url`       | `url`, `b64_json`, or `binary`. `binary` returns `{ contentType, base64 }`. |
+| Parameter    | Type   | Default     | Notes                                                                                               |
+| ------------ | ------ | ----------- | --------------------------------------------------------------------------------------------------- |
+| `prompt`     | string | —           | Required.                                                                                           |
+| `model`      | string | —           | e.g. `openai/dall-e-3`, `gemini/gemini-3-pro-image-preview`.                                        |
+| `provider`   | string | —           | Alias for `model`.                                                                                  |
+| `n`          | number | `1`         | 1–10.                                                                                               |
+| `size`       | string | `1024x1024` |                                                                                                     |
+| `quality`    | string | —           | `standard` or `hd`.                                                                                 |
+| `outputPath` | string | OS tmpdir   | Where to write the file. Default `os.tmpdir()/ninerouter-<slug>-<ts>.<ext>`. Ext from content-type. |
 
 ### `text_to_speech`
 
-Synthesize audio from text.
+Synthesize audio. Always writes a file and returns the audio as a base64 content block plus `{ outputPath, bytes, contentType }`. Omit `outputPath` to write to the OS temp dir.
 
-| Parameter        | Type   | Default | Notes                                                                         |
-| ---------------- | ------ | ------- | ----------------------------------------------------------------------------- |
-| `input`          | string | —       | Required.                                                                     |
-| `model`          | string | —       | e.g. `openai/tts-1`, `edge-tts/vi-VN-HoaiMyNeural`.                           |
-| `provider`       | string | —       | Alias for `model`.                                                            |
-| `responseFormat` | string | `json`  | `json` or `mp3`. `mp3` returns `{ contentType, audioBase64, format: "mp3" }`. |
+| Parameter    | Type   | Default   | Notes                                                                                               |
+| ------------ | ------ | --------- | --------------------------------------------------------------------------------------------------- |
+| `input`      | string | —         | Required.                                                                                           |
+| `model`      | string | —         | e.g. `openai/tts-1`, `edge-tts/vi-VN-HoaiMyNeural`.                                                 |
+| `provider`   | string | —         | Alias for `model`.                                                                                  |
+| `outputPath` | string | OS tmpdir | Where to write the file. Default `os.tmpdir()/ninerouter-<slug>-<ts>.<ext>`. Ext from content-type. |
 
 ### `speech_to_text`
 
@@ -262,7 +262,7 @@ Generate embeddings for a string or a batch of strings.
 
 - **Fallback chain.** For every model-using tool: if `model`/`provider` is set, only that model is tried. Otherwise the chain in `default_models.<tool>` is tried in order. If all entries fail, the tool throws an `All models failed. Errors: ...` error that includes every per-model message.
 - **`provider` is an alias for `model`** on every tool that accepts a model. Set whichever reads better for your use case.
-- **Image and audio binary responses** are returned as JSON containing `contentType` and `base64`. Decode locally if you need raw bytes.
+- **Image and audio are always written to a file and returned as a content block.** `generate_image` and `text_to_speech` request `b64_json` / `mp3` from upstream, write the bytes to `outputPath` (or the OS temp dir if you omit it), and return the asset as an MCP `image` / `audio` content block plus `{ outputPath, bytes, contentType }`. The host can display inline or just use the path. Extension is derived from upstream `content-type`.
 - **Config file wins over env vars.** If you need different settings for a single run, prefer `--config` over exporting env vars.
 - **STT multipart upload.** The tool sends the audio as `multipart/form-data`; `fileName` only matters when the upstream provider inspects the filename.
 - **Config is read once at startup.** Edit `config.toml` or change `NINEROUTER_URL` / `NINEROUTER_KEY`, then restart the MCP server in your client. Hot-reload is not implemented.
