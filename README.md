@@ -1,46 +1,36 @@
-# NineRouter MCP
+# ninerouter-mcp
 
-MCP server for 9Router with model discovery, automatic fallback, and type-safe validation.
+MCP server that exposes 9Router capabilities as native tools for any MCP client: model discovery, automatic fallback, and Zod-validated inputs.
 
-## Why this exists
+> **Status:** 9Router already hides provider-specific complexity behind a single API. This server exposes that API through MCP, so agents and apps can call web search, web fetch, image generation, TTS, STT, and embeddings as standard MCP tools — no skill-file loading, no per-provider glue code.
 
-9Router already hides provider-specific complexity behind a single API. This project exposes that API through MCP so clients can use 9Router capabilities directly as native tools.
+## Why use it
 
-**Benefits over skill-based approaches:**
+- Tools are always registered; no manual skill loading (saves tokens and context).
+- Automatic model fallback when the primary model fails.
+- Zod-validated inputs with clear error messages before any network call.
+- One config file for endpoint, auth, and default models with fallback chains.
+- Single transport (`stdio`); works with any MCP-capable client.
 
-- No repeated skill file loading (saves tokens and reduces context usage)
-- Tools are always available without manual skill invocation
-- Automatic model fallback when primary models fail
-- Type-safe validation with proper error messages
-- Direct integration into MCP-native workflows
+Chat / code generation is intentionally **not** included — that is what the host model is for.
 
-The goal is not to replace 9Router or duplicate its docs. The goal is to make 9Router capabilities immediately accessible from any MCP client.
+## Contents
 
-## What it provides
-
-- Model discovery for choosing valid model ids
-- Web search for finding current information
-- Web fetch for turning URLs into readable text or markdown
-- Image generation for text-to-image workflows
-- Text-to-speech for voice output
-- Speech-to-text for transcription
-- Embeddings for retrieval and semantic search
-
-## When to use it
-
-Use this server when you want an AI agent or app to work with 9Router through MCP instead of custom integration code for each capability.
-
-It is especially useful when you want one backend that can access multiple providers but still present a single tool interface to the model.
-
-If your client can already call MCP tools directly, you do not need separate 9Router skill docs; the MCP server becomes the integration layer.
-
-Chat/code-gen is intentionally left out of this MCP server.
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Run](#run)
+- [Tools](#tools)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
+- [License](#license)
 
 ## Installation
 
-**Kilo CLI / VS Code**
+The package is `ninerouter-mcp` on npm. Pick your client:
 
-Add to your `kilo.json`:
+### Kilo CLI / VS Code
+
+Add to `kilo.json`:
 
 ```json
 {
@@ -57,127 +47,261 @@ Add to your `kilo.json`:
 }
 ```
 
-**Claude Code**
+### Claude Code
 
 ```bash
-claude mcp add --scope user ninerouter -e NINEROUTER_URL=http://localhost:20128 -- npx -y ninerouter-mcp
+claude mcp add --scope user ninerouter \
+    -e NINEROUTER_URL=http://localhost:20128 \
+    -- npx -y ninerouter-mcp
 ```
 
-**Codex CLI**
+### Codex CLI
 
 ```bash
-codex mcp add ninerouter --env NINEROUTER_URL=http://localhost:20128 -- npx -y ninerouter-mcp
+codex mcp add ninerouter \
+    --env NINEROUTER_URL=http://localhost:20128 \
+    -- npx -y ninerouter-mcp
 ```
 
-**Agent Manager (VS Code Extension)**
+### Agent Manager (VS Code extension)
 
-Use the MCP settings in your workspace `kilo.json` (same as Kilo CLI above). Agent Manager automatically inherits MCP servers from Kilo config.
+Agent Manager inherits MCP servers from the workspace `kilo.json`. The Kilo CLI snippet above is enough.
 
 ## Configuration
 
-### Quick Setup
+The server needs a 9Router base URL. Optionally it accepts an API key and default-model fallbacks for each tool.
 
-Create a config file with defaults:
+Sources, in priority order (highest first):
+
+1. CLI flag `--config <path>` (or `--config-file`, `-c`, `NINEROUTER_CONFIG` env)
+2. `~/.config/ninerouter-mcp/config.toml`
+3. Environment variables: `NINEROUTER_URL`, `NINEROUTER_KEY`
+
+If the config file exists, it wins over environment variables.
+
+### Quick setup
+
+Generate a starter config file and edit it:
 
 ```bash
 npx ninerouter-mcp create-config
 ```
 
-This creates `~/.config/ninerouter-mcp/config.toml` with sample configuration. Edit it to set your 9Router base URL and optionally configure default models.
+This writes `~/.config/ninerouter-mcp/config.toml` and refuses to overwrite an existing file.
 
-### Manual Setup
+### Manual setup (env vars)
 
-1. Install dependencies:
+**Windows (PowerShell):**
 
-    ```bash
-    npm install
-    ```
+```powershell
+$env:NINEROUTER_URL = "http://localhost:20128"
+$env:NINEROUTER_KEY = "sk-..."   # optional
+```
 
-2. Configure the 9Router endpoint:
+**macOS / Linux:**
 
-    ```bash
-    set NINEROUTER_URL=http://localhost:20128
-    set NINEROUTER_KEY=sk-...
-    ```
+```bash
+export NINEROUTER_URL=http://localhost:20128
+export NINEROUTER_KEY=sk-...     # optional
+```
 
-    `NINEROUTER_KEY` is optional when your 9Router instance does not require auth.
+`NINEROUTER_KEY` is optional and only required when your 9Router instance has auth enabled.
 
-    You can also use a config file at `~/.config/ninerouter-mcp/config.toml`.
-    TOML settings override environment variables.
+### Manual setup (config file)
 
-    Example:
+```toml
+# 9Router base URL (required)
+base_url = "http://localhost:20128"
 
-    ```toml
-    base_url = "http://localhost:20128"
-    api_key = "sk-..."
+# Optional API key
+# api_key = "sk-..."
 
-    # Optional: default models with fallback support
-    [default_models]
-    web_search = ["tavily/search", "brave-search/search"]
-    web_fetch = "firecrawl/fetch"
-    generate_image = "openai/dall-e-3"
-    text_to_speech = "openai/tts-1"
-    speech_to_text = ["openai/whisper-1", "groq/whisper-large-v3-turbo"]
-    embeddings = "openai/text-embedding-3-small"
-    ```
+# Default models with fallback support.
+# Single string = one model.
+# Array = tried in order, first success wins, errors are aggregated.
+[default_models]
+web_search      = ["tavily/search", "brave-search/search"]
+web_fetch       = ["firecrawl/fetch", "jina-reader/fetch"]
+generate_image  = "openai/dall-e-3"
+text_to_speech  = "openai/tts-1"
+speech_to_text  = ["openai/whisper-1", "groq/whisper-large-v3-turbo"]
+embeddings      = "openai/text-embedding-3-small"
+```
 
-    Default models can be a single string or array of strings. When array, models are tried in order until one succeeds. If all fail, errors are aggregated.
+The `ninerouter` table is also accepted as an alias for top-level `base_url` and `api_key`:
 
-    To pass a different config file at startup, use `--config`:
+```toml
+[ninerouter]
+base_url = "http://localhost:20128"
+api_key  = "sk-..."
+```
 
-    ```bash
-    npm start -- --config D:\path\to\config.toml
-    ```
+Point to a non-default config file:
 
-3. Build the server:
-
-    ```bash
-    npm run build
-    ```
-
-4. Start the MCP server over stdio:
-
-    ```bash
-    npm start
-    ```
+```bash
+npx -y ninerouter-mcp --config /path/to/config.toml
+# or
+NINEROUTER_CONFIG=/path/to/config.toml npx -y ninerouter-mcp
+```
 
 ## Run
 
-For local development in this repo:
+After `npm install` from this repo:
 
 ```bash
 npm run build
 npm start
 ```
 
-If you publish the package to npm, users can run it directly with npx:
+Or in watch mode during development:
+
+```bash
+npm run dev
+```
+
+Published package users can run it directly:
 
 ```bash
 npx -y ninerouter-mcp
 ```
 
-That works because the package exposes a `bin` entry and builds `dist/index.js` during packing.
+## Tools
 
-If you want to run from the repo without publishing, use:
+Every tool is registered with the MCP server at startup. Unless noted, all tools return a single text content block with pretty-printed JSON.
+
+### `list_models`
+
+Discover valid model ids before calling other tools.
+
+| Parameter | Type   | Required | Description                                                                                              |
+| --------- | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
+| `kind`    | string | no       | One of `chat`, `image`, `tts`, `embedding`, `web`, `stt`, `image-to-text`. Omit for default chat models. |
+
+### `web_search`
+
+Search the web through 9Router.
+
+| Parameter      | Type   | Default | Notes                                                                                                |
+| -------------- | ------ | ------- | ---------------------------------------------------------------------------------------------------- |
+| `query`        | string | —       | Required.                                                                                            |
+| `model`        | string | —       | 9Router model id (e.g. `tavily/search`). Falls back to `provider`, then `default_models.web_search`. |
+| `provider`     | string | —       | Alias for `model`.                                                                                   |
+| `maxResults`   | number | `5`     | 1–20.                                                                                                |
+| `searchType`   | string | `web`   | `web` or `news`.                                                                                     |
+| `country`      | string | —       |                                                                                                      |
+| `language`     | string | —       |                                                                                                      |
+| `timeRange`    | string | —       |                                                                                                      |
+| `domainFilter` | string | —       |                                                                                                      |
+
+### `web_fetch`
+
+Fetch a URL and return it as markdown, text, or HTML.
+
+| Parameter       | Type   | Default    | Notes                                        |
+| --------------- | ------ | ---------- | -------------------------------------------- |
+| `url`           | string | —          | Required. Must be a valid URL.               |
+| `model`         | string | —          | e.g. `jina-reader/fetch`, `firecrawl/fetch`. |
+| `provider`      | string | —          | Alias for `model`.                           |
+| `format`        | string | `markdown` | `markdown`, `text`, or `html`.               |
+| `maxCharacters` | number | `8000`     | Truncation limit.                            |
+
+### `generate_image`
+
+Text-to-image generation.
+
+| Parameter        | Type   | Default     | Notes                                                                       |
+| ---------------- | ------ | ----------- | --------------------------------------------------------------------------- |
+| `prompt`         | string | —           | Required.                                                                   |
+| `model`          | string | —           | e.g. `openai/dall-e-3`, `gemini/gemini-3-pro-image-preview`.                |
+| `provider`       | string | —           | Alias for `model`.                                                          |
+| `n`              | number | `1`         | 1–10.                                                                       |
+| `size`           | string | `1024x1024` |                                                                             |
+| `quality`        | string | —           | `standard` or `hd`.                                                         |
+| `responseFormat` | string | `url`       | `url`, `b64_json`, or `binary`. `binary` returns `{ contentType, base64 }`. |
+
+### `text_to_speech`
+
+Synthesize audio from text.
+
+| Parameter        | Type   | Default | Notes                                                                         |
+| ---------------- | ------ | ------- | ----------------------------------------------------------------------------- |
+| `input`          | string | —       | Required.                                                                     |
+| `model`          | string | —       | e.g. `openai/tts-1`, `edge-tts/vi-VN-HoaiMyNeural`.                           |
+| `provider`       | string | —       | Alias for `model`.                                                            |
+| `responseFormat` | string | `json`  | `json` or `mp3`. `mp3` returns `{ contentType, audioBase64, format: "mp3" }`. |
+
+### `speech_to_text`
+
+Transcribe audio. Provide exactly one of `audioPath` or `audioBase64`.
+
+| Parameter        | Type   | Default | Notes                                                   |
+| ---------------- | ------ | ------- | ------------------------------------------------------- |
+| `audioPath`      | string | —       | Local file path.                                        |
+| `audioBase64`    | string | —       | Base64 payload.                                         |
+| `fileName`       | string | derived | Used for the multipart upload filename.                 |
+| `model`          | string | —       | e.g. `openai/whisper-1`, `groq/whisper-large-v3-turbo`. |
+| `provider`       | string | —       | Alias for `model`.                                      |
+| `language`       | string | —       | ISO-639-1 code, e.g. `en`, `vi`.                        |
+| `prompt`         | string | —       |                                                         |
+| `responseFormat` | string | `json`  | `json`, `text`, `verbose_json`, `srt`, `vtt`.           |
+| `temperature`    | number | —       | 0–1.                                                    |
+
+### `embeddings`
+
+Generate embeddings for a string or a batch of strings.
+
+| Parameter        | Type            | Default | Notes                                                         |
+| ---------------- | --------------- | ------- | ------------------------------------------------------------- |
+| `input`          | string \| array | —       | Required. Either one string or an array of non-empty strings. |
+| `model`          | string          | —       | e.g. `openai/text-embedding-3-small`.                         |
+| `provider`       | string          | —       | Alias for `model`.                                            |
+| `encodingFormat` | string          | `float` | `float` or `base64`.                                          |
+| `dimensions`     | number          | —       | Optional override.                                            |
+
+## Behavior notes
+
+- **Fallback chain.** For every model-using tool: if `model`/`provider` is set, only that model is tried. Otherwise the chain in `default_models.<tool>` is tried in order. If all entries fail, the tool throws an `All models failed. Errors: ...` error that includes every per-model message.
+- **`provider` is an alias for `model`** on every tool that accepts a model. Set whichever reads better for your use case.
+- **Image and audio binary responses** are returned as JSON containing `contentType` and `base64`. Decode locally if you need raw bytes.
+- **Config file wins over env vars.** If you need different settings for a single run, prefer `--config` over exporting env vars.
+- **STT multipart upload.** The tool sends the audio as `multipart/form-data`; `fileName` only matters when the upstream provider inspects the filename.
+- **Config is read once at startup.** Edit `config.toml` or change `NINEROUTER_URL` / `NINEROUTER_KEY`, then restart the MCP server in your client. Hot-reload is not implemented.
+
+## Troubleshooting
+
+- **`NINEROUTER_URL is required`** — set the env var or create `~/.config/ninerouter-mcp/config.toml` with `base_url`.
+- **`No model specified and no default_models.<tool> configured`** — either pass `model` in the call or add a `default_models` entry to your config.
+- **`All models failed. Errors: ...`** — every fallback model returned an error; the aggregated message includes each one for diagnosis.
+- **Auth errors (401/403)** — your 9Router instance requires a key; set `NINEROUTER_KEY` or `api_key` in the config file.
+- **STT fails with "Provide audioPath or audioBase64"** — exactly one of those two must be set.
+
+## Development
 
 ```bash
-npx tsx src/index.ts
+npm install
+npm run dev          # tsx watch mode
+npm run build        # tsc -> dist/
+npm start            # node dist/index.js
+npm run check        # typecheck + lint + prettier --check
 ```
 
-## Available Tools
+Project layout:
 
-- `list_models`
-- `web_search`
-- `web_fetch`
-- `generate_image`
-- `text_to_speech`
-- `speech_to_text`
-- `embeddings`
+```
+src/
+  index.ts               # bin entry; dispatches create-config or server
+  server.ts              # McpServer setup
+  ninerouter-client.ts   # config + HTTP helpers
+  create-config.ts       # `ninerouter-mcp create-config` subcommand
+  tools/
+    models.ts            # list_models
+    web.ts               # web_search, web_fetch
+    media.ts             # generate_image, text_to_speech, speech_to_text
+    embeddings.ts        # embeddings
+    common.ts            # shared fallback + json helpers
+config.example.toml      # sample config (mirrors create-config output)
+```
 
-## Notes
+## License
 
-- The server expects a local or reachable 9Router base URL in `NINEROUTER_URL`.
-- If present, `~/.config/ninerouter-mcp/config.toml` is loaded first and wins over env vars.
-- `list_models` can list default chat models or a specific capability kind like `image`, `tts`, `embedding`, `web`, `stt`, or `image-to-text`.
-- STT accepts either a local `audioPath` or a base64 payload.
-- Image and audio tools return JSON text, including base64 data when the upstream API returns binary content.
+Apache-2.0. See [LICENSE](LICENSE).
