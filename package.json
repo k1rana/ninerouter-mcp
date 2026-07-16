@@ -4,6 +4,9 @@
     "type": "module",
     "description": "MCP server for 9Router with model discovery, automatic fallback, and type-safe validation",
     "license": "Apache-2.0",
+    "engines": {
+        "node": ">=20"
+    },
     "author": "Farhan Brillan Widyakirana <https://tojoo.dev>",
     "repository": {
         "type": "git",
@@ -51,7 +54,7 @@
     },
     "dependencies": {
         "@modelcontextprotocol/server": "^2.0.0-beta.4",
-        "@iarna/toml": "^2.2.5",
+        "toml": "^5.0.0",
         "zod": "^4.4.3"
     },
     "devDependencies": {

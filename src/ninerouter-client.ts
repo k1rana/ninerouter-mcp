@@ -1,7 +1,7 @@
 import { access, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { parse as parseToml } from '@iarna/toml';
+import { parse as parseToml } from 'toml';
 
 export type NinerouterConfig = {
     baseUrl: string;
