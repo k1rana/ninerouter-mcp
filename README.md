@@ -1,4 +1,9 @@
-# ninerouter-mcp
+9Router MCP Server
+==================
+
+[![CI](https://github.com/k1rana/ninerouter-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/k1rana/ninerouter-mcp/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/ninerouter-mcp.svg)](https://www.npmjs.com/package/ninerouter-mcp)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](https://www.npmjs.com/package/ninerouter-mcp)
 
 MCP server that exposes 9Router capabilities as native tools for any MCP client: model discovery, automatic fallback, and Zod-validated inputs.
 
