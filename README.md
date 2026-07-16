@@ -31,46 +31,49 @@ Chat / code generation is intentionally **not** included — that is what the ho
 
 ## Installation
 
-The package is `ninerouter-mcp` on npm. Pick your client:
-
-### Kilo CLI / VS Code
-
-Add to `kilo.json`:
+The package is `ninerouter-mcp` on npm. The JSON body is identical across every MCP client — only the top-level key and file path differ. Paste the block into the right key in your client's config:
 
 ```json
 {
-    "mcp": {
-        "ninerouter": {
-            "type": "local",
-            "command": ["npx", "-y", "ninerouter-mcp"],
-            "environment": {
-                "NINEROUTER_URL": "http://localhost:20128"
-            },
-            "enabled": true
+    "ninerouter": {
+        "type": "stdio",
+        "command": "npx",
+        "args": ["-y", "ninerouter-mcp"],
+        "env": {
+            "NINEROUTER_URL": "http://localhost:20128"
         }
     }
 }
 ```
 
+Top-level keys by client: VS Code (`servers`), OpenCode (`mcp`, rename `env` → `environment`, set `type: "local"` and `enabled: true`), Claude Code / Cursor / Windsurf / Claude Desktop / Zed (`mcpServers` or `context_servers`, drop the `type` line). JetBrains uses a UI dialog at **Settings → Tools → AI Assistant → MCP** with the same command, args, and env.
+
 ### Claude Code
 
 ```bash
-claude mcp add --scope user ninerouter \
-    -e NINEROUTER_URL=http://localhost:20128 \
-    -- npx -y ninerouter-mcp
+claude mcp add --scope user ninerouter -e NINEROUTER_URL=http://localhost:20128 -- npx -y ninerouter-mcp
 ```
 
 ### Codex CLI
 
 ```bash
-codex mcp add ninerouter \
-    --env NINEROUTER_URL=http://localhost:20128 \
-    -- npx -y ninerouter-mcp
+codex mcp add ninerouter --env NINEROUTER_URL=http://localhost:20128 -- npx -y ninerouter-mcp
 ```
 
-### Agent Manager (VS Code extension)
+### Hermes Agent
 
-Agent Manager inherits MCP servers from the workspace `kilo.json`. The Kilo CLI snippet above is enough.
+Add to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+    ninerouter:
+        command: npx
+        args:
+            - -y
+            - ninerouter-mcp
+        env:
+            NINEROUTER_URL: http://localhost:20128
+```
 
 ## Configuration
 
