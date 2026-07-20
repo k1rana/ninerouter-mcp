@@ -1,5 +1,5 @@
 module.exports = {
-    branches: ['main'],
+    branches: ['main', { name: '+([0-9]).x-dev', channel: 'beta', prerelease: true }],
     tagFormat: '${version}',
     plugins: [
         {
@@ -17,11 +17,34 @@ module.exports = {
         },
         '@semantic-release/commit-analyzer',
         '@semantic-release/release-notes-generator',
-        ['@semantic-release/npm', { npmPublish: true }],
+        {
+            verifyRelease(_, { branch }) {
+                if (branch.channel && branch.channel !== 'latest' && branch.type === 'major') {
+                    throw new Error(
+                        `Branch ${branch.name} (channel ${branch.channel}) cannot publish a major release. Cut majors from main.`,
+                    );
+                }
+            },
+        },
+        [
+            '@semantic-release/exec',
+            {
+                prepareCmd:
+                    'tar --exclude=node_modules --exclude=.git -czf ninerouter-mcp-${nextRelease.version}.tar.gz dist package.json package-lock.json README.md LICENSE',
+            },
+        ],
+        [
+            '@semantic-release/npm',
+            {
+                npmPublish: true,
+                npmDistTag: ({ branch }) =>
+                    branch.channel && branch.channel !== 'latest' ? branch.channel : 'latest',
+            },
+        ],
         [
             '@semantic-release/github',
             {
-                assets: [{ path: 'dist/**', label: 'Build output' }],
+                assets: ['ninerouter-mcp-*.tar.gz'],
             },
         ],
         [

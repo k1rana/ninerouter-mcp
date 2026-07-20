@@ -1,6 +1,8 @@
 name: Release
 
 on:
+    push:
+        branches: [main, '+([0-9]).x-dev']
     workflow_dispatch:
         inputs:
             release_type:
@@ -63,6 +65,12 @@ jobs:
 
             - name: Install dependencies
               run: npm clean-install
+
+            - name: Guard major on dev branch
+              if: ${{ inputs.release_type == 'major' && !contains(github.ref, 'refs/heads/main') }}
+              run: |
+                  echo "::error::Major releases must be cut from main. Current ref: ${{ github.ref }}"
+                  exit 1
 
             - name: Release
               env:
