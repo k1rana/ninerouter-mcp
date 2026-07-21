@@ -46,7 +46,7 @@ module.exports = {
             '@semantic-release/exec',
             {
                 prepareCmd:
-                    'tar --exclude=node_modules --exclude=.git -czf ninerouter-mcp-${nextRelease.version}.tar.gz dist package.json package-lock.json README.md LICENSE',
+                    'npm run build && tar --exclude=node_modules --exclude=.git -czf ninerouter-mcp-${nextRelease.version}.tar.gz dist package.json package-lock.json README.md LICENSE',
             },
         ],
         [
