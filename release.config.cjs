@@ -1,5 +1,5 @@
 module.exports = {
-    branches: ['main', { name: '+([0-9]).x-dev', channel: 'beta', prerelease: true }],
+    branches: ['main', { name: '+([0-9]).x-dev', channel: 'beta', prerelease: 'beta' }],
     tagFormat: '${version}',
     plugins: [
         {
@@ -16,7 +16,23 @@ module.exports = {
             },
         },
         '@semantic-release/commit-analyzer',
-        '@semantic-release/release-notes-generator',
+        [
+            '@semantic-release/release-notes-generator',
+            {
+                preset: 'conventionalcommits',
+                writerOpts: {
+                    groupBy: 'type',
+                    commitGroupsSort: ['feat', 'fix', 'perf', 'docs', 'revert'],
+                    groups: [
+                        { type: 'feat', title: 'Features' },
+                        { type: 'fix', title: 'Fixes' },
+                        { type: 'perf', title: 'Improvements' },
+                        { type: 'docs', title: 'Docs' },
+                        { type: 'revert', title: 'Reverts' },
+                    ],
+                },
+            },
+        ],
         {
             verifyRelease(_, { branch }) {
                 if (branch.channel && branch.channel !== 'latest' && branch.type === 'major') {
