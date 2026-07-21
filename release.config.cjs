@@ -45,8 +45,7 @@ module.exports = {
         [
             '@semantic-release/exec',
             {
-                prepareCmd:
-                    'npm run build && tar --exclude=node_modules --exclude=.git -czf ninerouter-mcp-${nextRelease.version}.tar.gz dist package.json package-lock.json README.md LICENSE',
+                prepareCmd: 'npm pack --pack-destination .',
             },
         ],
         [
@@ -60,7 +59,7 @@ module.exports = {
         [
             '@semantic-release/github',
             {
-                assets: ['ninerouter-mcp-*.tar.gz'],
+                assets: ['ninerouter-mcp-*.tgz'],
             },
         ],
         [
