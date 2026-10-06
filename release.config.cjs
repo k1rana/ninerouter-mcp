@@ -43,17 +43,19 @@ module.exports = {
             },
         },
         [
-            '@semantic-release/exec',
-            {
-                prepareCmd: 'npm pack --pack-destination .',
-            },
-        ],
-        [
             '@semantic-release/npm',
             {
                 npmPublish: true,
                 npmDistTag: ({ branch }) =>
                     branch.channel && branch.channel !== 'latest' ? branch.channel : 'latest',
+            },
+        ],
+        [
+            '@semantic-release/exec',
+            {
+                // Must run after @semantic-release/npm so package.json already holds
+                // the new version, otherwise npm pack names the tarball with the old one.
+                prepareCmd: 'npm pack --pack-destination .',
             },
         ],
         [
