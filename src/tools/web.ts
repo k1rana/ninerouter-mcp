@@ -15,7 +15,7 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
                     .string()
                     .optional()
                     .describe(
-                        'Web-search model id, for example tavily/search or brave-search/search.',
+                        'Web-search model id, for example tavily/search or brave-search/search. Omit it to use the configured default_models.web_search chain.',
                     ),
                 provider: z.string().optional().describe('Alias for model.'),
                 maxResults: z.number().int().positive().max(20).optional().default(5),
@@ -75,7 +75,7 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
                     .string()
                     .optional()
                     .describe(
-                        'Web-fetch model id, for example jina-reader/fetch or firecrawl/fetch.',
+                        'Web-fetch model id, for example jina-reader/fetch or firecrawl/fetch. Omit it to use the configured default_models.web_fetch chain.',
                     ),
                 provider: z.string().optional().describe('Alias for model.'),
                 format: z.enum(['markdown', 'text', 'html']).optional().default('markdown'),

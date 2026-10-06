@@ -13,7 +13,9 @@ export function registerEmbeddingTools(server: McpServer, config: NinerouterConf
                 model: z
                     .string()
                     .optional()
-                    .describe('Embedding model id, for example openai/text-embedding-3-small.'),
+                    .describe(
+                        'Embedding model id, for example openai/text-embedding-3-small. Omit it to use the configured default_models.embeddings chain.',
+                    ),
                 provider: z.string().optional().describe('Alias for model.'),
                 input: z
                     .union([z.string(), z.array(z.string().min(1))])

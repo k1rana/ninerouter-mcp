@@ -83,7 +83,7 @@ export function registerModelTools(server: McpServer, config: NinerouterConfig):
     server.registerTool(
         'list_models',
         {
-            description: `List available model ids. Call this first to discover a valid \`model\` value before using web_search, web_fetch, generate_image, text_to_speech, speech_to_text, or embeddings. Pass \`kind\` to filter by capability. Results are filtered by \`search\`, then paged with \`offset\`/\`limit\` (page size defaults to ${LIST_MODELS_DEFAULTS.limit}; \`limit: 0\` returns everything). The response carries \`total\`, \`count\`, \`offset\`, and \`nextOffset\` (absent when there is no next page). Results are cached briefly, so repeat calls are fast.`,
+            description: `Look up model ids exposed by 9Router. This tool is optional: the other tools work without it because each has a configured default model or fallback chain. Call it only to target a specific model, or to see which ids exist. \`kind\` filters by capability; \`search\` filters by name. Then \`offset\` and \`limit\` page through the matches (page size defaults to ${LIST_MODELS_DEFAULTS.limit}; \`limit: 0\` returns everything). Each response reports \`total\`, \`count\`, \`offset\`, and \`nextOffset\`, which is absent on the last page. Responses come from a short-lived cache, so repeat calls are fast.`,
             inputSchema: z.object({
                 kind: z
                     .enum(MODEL_KINDS)
@@ -121,7 +121,7 @@ export function registerModelTools(server: McpServer, config: NinerouterConfig):
 
             const found = findListArray(payload);
             if (!found) {
-                // Not a list-shaped response (e.g. voices or a single object) — return as-is.
+                // Not a list-shaped response (such as voices or a single object), so return it as-is.
                 return {
                     content: [{ type: 'text', text: toPrettyJson(payload) }],
                 };

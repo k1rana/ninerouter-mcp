@@ -56,7 +56,7 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                     .string()
                     .optional()
                     .describe(
-                        'Image model id, for example gemini/gemini-3-pro-image-preview or openai/dall-e-3.',
+                        'Image model id, for example gemini/gemini-3-pro-image-preview or openai/dall-e-3. Omit it to use the configured default_models.generate_image chain.',
                     ),
                 provider: z.string().optional().describe('Alias for model.'),
                 n: z.number().int().positive().max(10).optional().default(1),
@@ -138,7 +138,7 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                     .string()
                     .optional()
                     .describe(
-                        'TTS model or voice id, for example openai/tts-1 or edge-tts/vi-VN-HoaiMyNeural.',
+                        'TTS model or voice id, for example openai/tts-1 or edge-tts/vi-VN-HoaiMyNeural. Omit it to use the configured default_models.text_to_speech chain.',
                     ),
                 provider: z.string().optional().describe('Alias for model.'),
                 outputPath: z
@@ -209,7 +209,7 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                         .string()
                         .optional()
                         .describe(
-                            'STT model id, for example openai/whisper-1 or groq/whisper-large-v3-turbo.',
+                            'STT model id, for example openai/whisper-1 or groq/whisper-large-v3-turbo. Omit it to use the configured default_models.speech_to_text chain.',
                         ),
                     provider: z.string().optional().describe('Alias for model.'),
                     audioPath: z.string().optional().describe('Local path to an audio file.'),

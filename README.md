@@ -185,7 +185,7 @@ Every tool is registered with the MCP server at startup. Unless noted, all tools
 
 ### `list_models`
 
-Discover valid model ids before calling other tools. Results are filtered by `search`, then paged with `offset`/`limit` so a large catalog cannot flood the context window. Each response carries `total`, `count`, `offset`, and `nextOffset` (omitted when there is no next page). The upstream list is cached for about a minute because 9Router rebuilds the whole catalog per request (several seconds), so only the first call is slow.
+Look up model ids exposed by 9Router. This tool is optional: every other tool works without it, because each has a configured default model or fallback chain. Call it only to target a specific model or to discover ids that differ from the defaults. It filters by `search`, then pages through the matches with `offset`/`limit`, so a large catalog cannot flood the context window. Each response reports `total`, `count`, `offset`, and `nextOffset` (omitted on the last page). The upstream list is cached for about a minute, because 9Router rebuilds the whole catalog on every request (several seconds), so only the first call is slow.
 
 | Parameter | Type    | Required | Description                                                                                              |
 | --------- | ------- | -------- | -------------------------------------------------------------------------------------------------------- |
@@ -294,7 +294,7 @@ Generate embeddings for a string or a batch of strings.
 - **Image and audio are always written to a file and returned as a content block.** `generate_image` and `text_to_speech` request `b64_json` / `mp3` from upstream, write the bytes to `outputPath` (or the OS temp dir if you omit it), and return the asset as an MCP `image` / `audio` content block plus `{ outputPath, bytes, contentType }`. The host can display inline or just use the path. Extension is derived from upstream `content-type`.
 - **Config file wins over env vars.** If you need different settings for a single run, prefer `--config` over exporting env vars.
 - **STT multipart upload.** The tool sends the audio as `multipart/form-data`; `fileName` only matters when the upstream provider inspects the filename.
-- **`list_models` is trimmed and cached.** The tool caps its output (default `20`) and in-memory caches the full upstream list for about a minute. This is not server-side pagination — `/v1/models` ignores query params and always returns the whole catalog. The cap protects the context window, and the cache protects latency, since 9Router rebuilds the catalog per request (observed ~7s, even for `/v1/models/<kind>` which returns a tiny body). Pass `refresh: true` to force a refetch.
+- **`list_models` is trimmed and cached.** The tool caps its output (default `20`) and keeps the full upstream list in memory for about a minute. This is not server-side pagination: `/v1/models` ignores query params and always returns the whole catalog. The cap protects the context window, and the cache protects latency, since 9Router rebuilds the catalog on every request (observed ~7s, even for `/v1/models/<kind>`, which returns a tiny body). Pass `refresh: true` to force a refetch.
 - **Config is read once at startup.** Edit `config.toml` or change `NINEROUTER_URL` / `NINEROUTER_KEY`, then restart the MCP server in your client. Hot-reload is not implemented.
 
 ## Troubleshooting
