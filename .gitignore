@@ -8,3 +8,7 @@ dist
 !.env.example
 kilo.json
 ninerouter-mcp-*.tar.gz
+
+# IDE
+.zed/
+

@@ -134,6 +134,12 @@ generate_image  = "openai/dall-e-3"
 text_to_speech  = "openai/tts-1"
 speech_to_text  = ["openai/whisper-1", "groq/whisper-large-v3-turbo"]
 embeddings      = "openai/text-embedding-3-small"
+
+# Defaults for the list_models tool (all optional; these are the built-in values)
+[list_models]
+limit = 20             # default page size
+offset = 0             # default start index
+cache_ttl_seconds = 60 # 0 disables caching
 ```
 
 The `ninerouter` table is also accepted as an alias for top-level `base_url` and `api_key`:
@@ -179,11 +185,26 @@ Every tool is registered with the MCP server at startup. Unless noted, all tools
 
 ### `list_models`
 
-Discover valid model ids before calling other tools.
+Discover valid model ids before calling other tools. Results are filtered by `search`, then paged with `offset`/`limit` so a large catalog cannot flood the context window. Each response carries `total`, `count`, `offset`, and `nextOffset` (omitted when there is no next page). The upstream list is cached for about a minute because 9Router rebuilds the whole catalog per request (several seconds), so only the first call is slow.
 
-| Parameter | Type   | Required | Description                                                                                              |
-| --------- | ------ | -------- | -------------------------------------------------------------------------------------------------------- |
-| `kind`    | string | no       | One of `chat`, `image`, `tts`, `embedding`, `web`, `stt`, `image-to-text`. Omit for default chat models. |
+| Parameter | Type    | Required | Description                                                                                              |
+| --------- | ------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `kind`    | string  | no       | One of `chat`, `image`, `tts`, `embedding`, `web`, `stt`, `image-to-text`. Omit for default chat models. |
+| `search`  | string  | no       | Case-insensitive substring match against model ids/names.                                                |
+| `limit`   | number  | no       | Page size (default `20`, max `500`). Use `0` for the whole list.                                         |
+| `offset`  | number  | no       | Index of the first model to return (default `0`). Use `nextOffset` to page.                              |
+| `refresh` | boolean | no       | Bypass the cache and refetch from 9Router.                                                               |
+
+Defaults can be overridden in `config.toml`:
+
+```toml
+[list_models]
+limit = 20             # default page size
+offset = 0             # default start index
+cache_ttl_seconds = 60 # 0 disables caching
+```
+
+Built-in defaults (used when a key is omitted): `limit = 20`, `offset = 0`, `cache_ttl_seconds = 60`.
 
 ### `web_search`
 
@@ -273,6 +294,7 @@ Generate embeddings for a string or a batch of strings.
 - **Image and audio are always written to a file and returned as a content block.** `generate_image` and `text_to_speech` request `b64_json` / `mp3` from upstream, write the bytes to `outputPath` (or the OS temp dir if you omit it), and return the asset as an MCP `image` / `audio` content block plus `{ outputPath, bytes, contentType }`. The host can display inline or just use the path. Extension is derived from upstream `content-type`.
 - **Config file wins over env vars.** If you need different settings for a single run, prefer `--config` over exporting env vars.
 - **STT multipart upload.** The tool sends the audio as `multipart/form-data`; `fileName` only matters when the upstream provider inspects the filename.
+- **`list_models` is trimmed and cached.** The tool caps its output (default `20`) and in-memory caches the full upstream list for about a minute. This is not server-side pagination — `/v1/models` ignores query params and always returns the whole catalog. The cap protects the context window, and the cache protects latency, since 9Router rebuilds the catalog per request (observed ~7s, even for `/v1/models/<kind>` which returns a tiny body). Pass `refresh: true` to force a refetch.
 - **Config is read once at startup.** Edit `config.toml` or change `NINEROUTER_URL` / `NINEROUTER_KEY`, then restart the MCP server in your client. Hot-reload is not implemented.
 
 ## Troubleshooting

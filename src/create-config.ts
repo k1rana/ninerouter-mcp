@@ -41,6 +41,13 @@ speech_to_text = ["openai/whisper-1", "groq/whisper-large-v3-turbo"]
 
 # Embeddings
 embeddings = "openai/text-embedding-3-small"
+
+# Optional: defaults for the list_models tool
+# Omitted keys fall back to the built-in defaults (limit 20, offset 0, cache 60s)
+[list_models]
+limit = 20
+offset = 0
+cache_ttl_seconds = 60
 `;
 
 async function createConfig(): Promise<void> {

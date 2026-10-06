@@ -14,6 +14,11 @@ export type NinerouterConfig = {
         speechToText?: string[];
         embeddings?: string[];
     };
+    listModels?: {
+        limit?: number;
+        offset?: number;
+        cacheTtlMs?: number;
+    };
 };
 
 export type NinerouterConfigFile = {
@@ -31,6 +36,11 @@ export type NinerouterConfigFile = {
         speech_to_text?: string | string[];
         embeddings?: string | string[];
     };
+    list_models?: {
+        limit?: number;
+        offset?: number;
+        cache_ttl_seconds?: number;
+    };
 };
 
 export type NinerouterConfigOptions = {
@@ -38,6 +48,13 @@ export type NinerouterConfigOptions = {
 };
 
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), '.config', 'ninerouter-mcp', 'config.toml');
+
+// Built-in defaults for `list_models`; config.toml `[list_models]` overrides these.
+export const LIST_MODELS_DEFAULTS = {
+    limit: 20,
+    offset: 0,
+    cacheTtlMs: 60_000,
+} as const;
 
 export function getDefaultConfigPath(): string {
     return DEFAULT_CONFIG_PATH;
@@ -126,10 +143,23 @@ export async function getConfig(options: NinerouterConfigOptions = {}): Promise<
           }
         : undefined;
 
+    const listModelsFile = configFile?.list_models;
+    const listModels = listModelsFile
+        ? {
+              limit: listModelsFile.limit,
+              offset: listModelsFile.offset,
+              cacheTtlMs:
+                  typeof listModelsFile.cache_ttl_seconds === 'number'
+                      ? Math.round(listModelsFile.cache_ttl_seconds * 1000)
+                      : undefined,
+          }
+        : undefined;
+
     return {
         baseUrl: normalizeBaseUrl(baseUrl),
         apiKey: apiKey ? apiKey : undefined,
         defaultModels,
+        listModels,
     };
 }
 
