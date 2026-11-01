@@ -23,16 +23,21 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
         'web_search',
         {
             description:
-                'Search the web and return the raw upstream search payload as JSON. Use when the user needs current information, links, or news. Pass `model` (or its alias `provider`) to pick a search backend: a provider id (`tavily`, `serper`), a catalog id (`tavily/search`), or a combo (`search-combo`). Without it, the server tries the configured `default_models.web_search` chain in order. When the chosen provider does not read a filter, the server drops it and reports it in `warnings`, so check that field before trusting a filtered result set.',
+                'Search the web and return the raw upstream search payload as JSON. Use when the user needs current information, links, or news. Leave `model` unset to use the configured `default_models.web_search` chain; set it only to force one backend: a provider id (`tavily`, `serper`), a catalog id (`tavily/search`), or a combo (`search-combo`). When the chosen backend does not read a filter, the server drops it and reports it in `warnings`, so check that field before trusting a filtered result set.',
             inputSchema: z.object({
                 query: z.string().min(1).describe('Search query to send to the backend.'),
                 model: z
                     .string()
                     .optional()
                     .describe(
-                        'Search backend to use: a provider id (`tavily`), a catalog id (`tavily/search`), or a combo name (`search-combo`). Omit it to use the configured default_models.web_search chain.',
+                        'Omit it to use the configured default_models.web_search chain. Set it to force one backend: a provider id (`tavily`), a catalog id (`tavily/search`), or a combo name (`search-combo`).',
                     ),
-                provider: z.string().optional().describe('Alias for model.'),
+                provider: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Alias for `model`. Omit it to use the configured default_models.web_search chain.',
+                    ),
                 maxResults: z
                     .number()
                     .int()
@@ -185,16 +190,21 @@ export function registerWebTools(server: McpServer, config: NinerouterConfig): v
         'web_fetch',
         {
             description:
-                'Fetch a URL and return its content as markdown (default), plain text, or HTML. Use when the user gives a link and you need its readable body. The server truncates the output to `maxCharacters` (default 8000). Pass `model` (alias `provider`) to choose a fetcher: a provider id (`tavily`), a catalog id (`tavily/fetch`), or a combo (`fetch-combo`). Without it, the server tries the configured `default_models.web_fetch` chain in order.',
+                'Fetch a URL and return its content as markdown (default), plain text, or HTML. Use when the user gives a link and you need its readable body. The server truncates the output to `maxCharacters` (default 8000). Leave `model` unset to use the configured `default_models.web_fetch` chain; set it only to force one fetcher: a provider id (`tavily`), a catalog id (`tavily/fetch`), or a combo (`fetch-combo`).',
             inputSchema: z.object({
                 url: z.string().url().describe('URL to fetch and extract.'),
                 model: z
                     .string()
                     .optional()
                     .describe(
-                        'Fetch backend to use: a provider id (`tavily`), a catalog id (`tavily/fetch`), or a combo name (`fetch-combo`). Omit it to use the configured default_models.web_fetch chain.',
+                        'Omit it to use the configured default_models.web_fetch chain. Set it to force one fetcher: a provider id (`tavily`), a catalog id (`tavily/fetch`), or a combo name (`fetch-combo`).',
                     ),
-                provider: z.string().optional().describe('Alias for model.'),
+                provider: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Alias for `model`. Omit it to use the configured default_models.web_fetch chain.',
+                    ),
                 format: z.enum(['markdown', 'text', 'html']).optional().default('markdown'),
                 maxCharacters: z.number().int().nonnegative().optional().default(8000),
             }),

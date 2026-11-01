@@ -58,7 +58,12 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                     .describe(
                         'Image model id, for example gemini/gemini-3-pro-image-preview or openai/dall-e-3. Omit it to use the configured default_models.generate_image chain.',
                     ),
-                provider: z.string().optional().describe('Alias for model.'),
+                provider: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Alias for `model`. Omit it to use the configured default_models.generate_image chain.',
+                    ),
                 n: z.number().int().positive().max(10).optional().default(1),
                 size: z.string().optional().default('1024x1024'),
                 quality: z.enum(['standard', 'hd']).optional(),
@@ -140,7 +145,12 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                     .describe(
                         'TTS model or voice id, for example openai/tts-1 or edge-tts/vi-VN-HoaiMyNeural. Omit it to use the configured default_models.text_to_speech chain.',
                     ),
-                provider: z.string().optional().describe('Alias for model.'),
+                provider: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Alias for `model`. Omit it to use the configured default_models.text_to_speech chain.',
+                    ),
                 outputPath: z
                     .string()
                     .optional()
@@ -202,7 +212,7 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
         'speech_to_text',
         {
             description:
-                'Transcribe audio. Provide exactly one of `audioPath` (local file) or `audioBase64` (base64 payload); both are sent as multipart upload. `responseFormat` selects the output shape (`json`, `text`, `verbose_json`, `srt`, `vtt`). Pass `model` (alias `provider`) to pick a transcriber (e.g. `openai/whisper-1`, `groq/whisper-large-v3-turbo`); otherwise the configured `default_models.speech_to_text` fallback chain is tried in order.',
+                'Transcribe audio. Provide exactly one of `audioPath` (local file) or `audioBase64` (base64 payload); both are sent as multipart upload. `responseFormat` selects the output shape (`json`, `text`, `verbose_json`, `srt`, `vtt`). Leave `model` unset to use the configured `default_models.speech_to_text` fallback chain; set it only to force a transcriber (e.g. `openai/whisper-1`, `groq/whisper-large-v3-turbo`).',
             inputSchema: z
                 .object({
                     model: z
@@ -211,7 +221,12 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                         .describe(
                             'STT model id, for example openai/whisper-1 or groq/whisper-large-v3-turbo. Omit it to use the configured default_models.speech_to_text chain.',
                         ),
-                    provider: z.string().optional().describe('Alias for model.'),
+                    provider: z
+                        .string()
+                        .optional()
+                        .describe(
+                            'Alias for `model`. Omit it to use the configured default_models.speech_to_text chain.',
+                        ),
                     audioPath: z.string().optional().describe('Local path to an audio file.'),
                     audioBase64: z.string().optional().describe('Base64-encoded audio payload.'),
                     fileName: z

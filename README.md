@@ -311,7 +311,7 @@ Generate embeddings for a string or a batch of strings.
 ## Behavior notes
 
 - **Fallback chain.** For every model-using tool: if `model`/`provider` is set, only that model is tried. Otherwise the chain in `default_models.<tool>` is tried in order. If all entries fail, the tool throws an `All models failed. Errors: ...` error that includes every per-model message.
-- **`provider` is an alias for `model`** on every tool that accepts a model. Set whichever reads better for your use case.
+- **`model` and `provider` are both optional.** `provider` is an alias for `model`. When neither is set, the tool uses its configured `default_models.<tool>` chain. Set `model` only to force a single backend, because either one overrides the chain.
 - **Web ids come in two spellings.** 9Router's catalog publishes `tavily/search` and `tavily/fetch`, while its search and fetch endpoints want the provider itself (`tavily`). Both spellings work here: the action suffix is stripped before the request.
 - **Image and audio are always written to a file and returned as a content block.** `generate_image` and `text_to_speech` request `b64_json` / `mp3` from upstream, write the bytes to `outputPath` (or the OS temp dir if you omit it), and return the asset as an MCP `image` / `audio` content block plus `{ outputPath, bytes, contentType }`. The host can display inline or just use the path. Extension is derived from upstream `content-type`.
 - **Config file wins over env vars.** If you need different settings for a single run, prefer `--config` over exporting env vars.

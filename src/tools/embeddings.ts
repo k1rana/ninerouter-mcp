@@ -8,15 +8,20 @@ export function registerEmbeddingTools(server: McpServer, config: NinerouterConf
         'embeddings',
         {
             description:
-                'Generate vector embeddings for a single string or a batch of strings. Returns the raw upstream payload (vectors, usage). Use for retrieval, semantic search, clustering, or similarity. Pass `model` (alias `provider`) to pick an embedding model (e.g. `openai/text-embedding-3-small`); otherwise the configured `default_models.embeddings` fallback chain is tried in order.',
+                'Generate vector embeddings for a single string or a batch of strings. Returns the raw upstream payload (vectors, usage). Use for retrieval, semantic search, clustering, or similarity. Leave `model` unset to use the configured `default_models.embeddings` fallback chain; set it only to force an embedding model (e.g. `openai/text-embedding-3-small`).',
             inputSchema: z.object({
                 model: z
                     .string()
                     .optional()
                     .describe(
-                        'Embedding model id, for example openai/text-embedding-3-small. Omit it to use the configured default_models.embeddings chain.',
+                        'Omit it to use the configured default_models.embeddings chain. Set it to force an embedding model, for example openai/text-embedding-3-small.',
                     ),
-                provider: z.string().optional().describe('Alias for model.'),
+                provider: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Alias for `model`. Omit it to use the configured default_models.embeddings chain.',
+                    ),
                 input: z
                     .union([z.string(), z.array(z.string().min(1))])
                     .describe('Text input or a batch of text inputs.'),
