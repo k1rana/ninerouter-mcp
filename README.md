@@ -179,6 +179,26 @@ Published package users can run it directly:
 npx -y ninerouter-mcp
 ```
 
+### Serve over HTTP
+
+Add `--http` to serve the MCP endpoint as Streamable HTTP on `/mcp` instead of stdio. Use it when the client cannot spawn a process, or when the server runs on a different host from the client.
+
+```bash
+npx -y ninerouter-mcp --http --port 3000 --host 127.0.0.1
+```
+
+| Flag            | Default      | Notes                                                                                                                                    |
+| --------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `--http`        | off          | Serve Streamable HTTP instead of stdio.                                                                                                  |
+| `--port` / `-p` | `3000`       | Listen port.                                                                                                                             |
+| `--host`        | `127.0.0.1`  | Listen address. Use `0.0.0.0` to accept clients from other machines.                                                                     |
+| `--public-url`  | request host | Origin the server uses to build download URLs, for a deployment behind a proxy. Env: `NINEROUTER_MCP_PUBLIC_URL`.                        |
+| `--local`       | off          | Assume clients share this server's filesystem: `auto` returns a content block plus `outputPath`, not a URL. Env: `NINEROUTER_MCP_LOCAL`. |
+
+Over HTTP the client may not share the server's filesystem, so a written path can be useless to it. `generate_image` and `text_to_speech` therefore hand back a signed download URL instead of the base64 bytes. The URL looks like `/files/<session>/<id>?exp=<ms>&sig=<hmac>`, expires after 15 minutes, and needs no MCP session: the HMAC is the authorization, so a browser or `curl` can fetch it.
+
+HTTP does not imply another machine, though. When one server process backs many agents on the same host, the client can read the path just fine and a URL only adds a round trip. Pass `--local` for that case: `auto` then behaves like stdio (content block plus `outputPath`), the server stops exposing a download route, and `--public-url` no longer applies. A per-call `return` still overrides the default, so an agent can ask for `inline` or `path` regardless.
+
 ## Tools
 
 Every tool is registered with the MCP server at startup. Unless noted, all tools return a single text content block with pretty-printed JSON.
@@ -257,28 +277,30 @@ Fetch a URL and return it as markdown, text, or HTML.
 
 ### `generate_image`
 
-Text-to-image generation. Always writes a file and returns the image as a base64 content block plus `{ outputPath, bytes, contentType }`. Omit `outputPath` to write to the OS temp dir.
+Text-to-image generation. Writes the file, then hands it back per `return`: a base64 content block plus `{ outputPath, bytes, contentType }` under stdio, or a signed download URL under HTTP. Omit `outputPath` to write to the OS temp dir.
 
-| Parameter    | Type   | Default     | Notes                                                                                               |
-| ------------ | ------ | ----------- | --------------------------------------------------------------------------------------------------- |
-| `prompt`     | string | —           | Required.                                                                                           |
-| `model`      | string | —           | e.g. `openai/dall-e-3`, `gemini/gemini-3-pro-image-preview`.                                        |
-| `provider`   | string | —           | Alias for `model`.                                                                                  |
-| `n`          | number | `1`         | 1–10.                                                                                               |
-| `size`       | string | `1024x1024` |                                                                                                     |
-| `quality`    | string | —           | `standard` or `hd`.                                                                                 |
-| `outputPath` | string | OS tmpdir   | Where to write the file. Default `os.tmpdir()/ninerouter-<slug>-<ts>.<ext>`. Ext from content-type. |
+| Parameter    | Type   | Default     | Notes                                                                                                                      |
+| ------------ | ------ | ----------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `prompt`     | string | —           | Required.                                                                                                                  |
+| `model`      | string | —           | e.g. `openai/dall-e-3`, `gemini/gemini-3-pro-image-preview`.                                                               |
+| `provider`   | string | —           | Alias for `model`.                                                                                                         |
+| `n`          | number | `1`         | 1–10.                                                                                                                      |
+| `size`       | string | `1024x1024` |                                                                                                                            |
+| `quality`    | string | —           | `standard` or `hd`.                                                                                                        |
+| `outputPath` | string | OS tmpdir   | Where to write the file. Default `os.tmpdir()/ninerouter-<slug>-<ts>.<ext>`. Ext from content-type.                        |
+| `return`     | string | `auto`      | `auto` returns a content block under stdio and a URL under HTTP; `inline` forces the block; `path` returns the path alone. |
 
 ### `text_to_speech`
 
-Synthesize audio. Always writes a file and returns the audio as a base64 content block plus `{ outputPath, bytes, contentType }`. Omit `outputPath` to write to the OS temp dir.
+Synthesize audio. Writes the file, then hands it back per `return`: a base64 content block plus `{ outputPath, bytes, contentType }` under stdio, or a signed download URL under HTTP. Omit `outputPath` to write to the OS temp dir.
 
-| Parameter    | Type   | Default   | Notes                                                                                               |
-| ------------ | ------ | --------- | --------------------------------------------------------------------------------------------------- |
-| `input`      | string | —         | Required.                                                                                           |
-| `model`      | string | —         | e.g. `openai/tts-1`, `edge-tts/vi-VN-HoaiMyNeural`.                                                 |
-| `provider`   | string | —         | Alias for `model`.                                                                                  |
-| `outputPath` | string | OS tmpdir | Where to write the file. Default `os.tmpdir()/ninerouter-<slug>-<ts>.<ext>`. Ext from content-type. |
+| Parameter    | Type   | Default   | Notes                                                                                                                      |
+| ------------ | ------ | --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `input`      | string | —         | Required.                                                                                                                  |
+| `model`      | string | —         | e.g. `openai/tts-1`, `edge-tts/vi-VN-HoaiMyNeural`.                                                                        |
+| `provider`   | string | —         | Alias for `model`.                                                                                                         |
+| `outputPath` | string | OS tmpdir | Where to write the file. Default `os.tmpdir()/ninerouter-<slug>-<ts>.<ext>`. Ext from content-type.                        |
+| `return`     | string | `auto`    | `auto` returns a content block under stdio and a URL under HTTP; `inline` forces the block; `path` returns the path alone. |
 
 ### `speech_to_text`
 
@@ -313,7 +335,7 @@ Generate embeddings for a string or a batch of strings.
 - **Fallback chain.** For every model-using tool: if `model`/`provider` is set, only that model is tried. Otherwise the chain in `default_models.<tool>` is tried in order. If all entries fail, the tool throws an `All models failed. Errors: ...` error that includes every per-model message.
 - **`model` and `provider` are both optional.** `provider` is an alias for `model`. When neither is set, the tool uses its configured `default_models.<tool>` chain. Set `model` only to force a single backend, because either one overrides the chain.
 - **Web ids come in two spellings.** 9Router's catalog publishes `tavily/search` and `tavily/fetch`, while its search and fetch endpoints want the provider itself (`tavily`). Both spellings work here: the action suffix is stripped before the request.
-- **Image and audio are always written to a file and returned as a content block.** `generate_image` and `text_to_speech` request `b64_json` / `mp3` from upstream, write the bytes to `outputPath` (or the OS temp dir if you omit it), and return the asset as an MCP `image` / `audio` content block plus `{ outputPath, bytes, contentType }`. The host can display inline or just use the path. Extension is derived from upstream `content-type`.
+- **Image and audio go to a file first, then to the caller.** `generate_image` and `text_to_speech` request `b64_json` / `mp3` from upstream and write the bytes to `outputPath` (or the OS temp dir if you omit it). Under stdio the caller gets an MCP `image` / `audio` content block plus `{ outputPath, bytes, contentType }`; under HTTP it gets a signed, 15-minute download URL instead, because a path the server wrote may not exist on the client's machine. Start HTTP with `--local` when the client does share the server's filesystem (one server, many agents on one host), and the server returns the stdio shape. Set `return` on either tool to force a shape. Extension is derived from upstream `content-type`.
 - **Config file wins over env vars.** If you need different settings for a single run, prefer `--config` over exporting env vars.
 - **STT multipart upload.** The tool sends the audio as `multipart/form-data`; `fileName` only matters when the upstream provider inspects the filename.
 - **`list_models` is trimmed and cached.** The tool caps its output (default `20`) and keeps the full upstream list in memory for about a minute. This is not server-side pagination: `/v1/models` ignores query params and always returns the whole catalog. The cap protects the context window, and the cache protects latency, since 9Router rebuilds the catalog on every request (observed ~7s, even for `/v1/models/<kind>`, which returns a tiny body). Pass `refresh: true` to force a refetch.

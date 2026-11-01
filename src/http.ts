@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import {
     WebStandardStreamableHTTPServerTransport,
     isJsonContentType,
@@ -7,18 +8,36 @@ import {
 import type { McpServer } from '@modelcontextprotocol/server';
 import { getConfig, resolveConfigPath } from './ninerouter-client.js';
 import type { NinerouterConfig } from './ninerouter-client.js';
+import { createUrlExposer, DownloadStore } from './lib/download-links.js';
+import { LOCAL_RUNTIME, type MediaRuntime } from './lib/media-output.js';
 import { buildServer, registerTools } from './server.js';
+
+/** Where signed download links are served from, alongside the MCP endpoint. */
+const FILES_PATH = '/files';
 
 type HttpArgs = {
     port: number;
     host: string;
     path: string;
     configPath: string | undefined;
+    publicUrl: string | undefined;
+    /** The client shares this server's filesystem, so `auto` hands back a path instead of a URL. */
+    local: boolean;
 };
+
+function normalizePublicUrl(value: string): string {
+    return value.replace(/\/+$/, '');
+}
+
+function isTruthy(value: string | undefined): boolean {
+    return value === '1' || value?.toLowerCase() === 'true' || value?.toLowerCase() === 'yes';
+}
 
 function parseHttpArgs(argv: string[]): HttpArgs {
     let port = 3000;
     let host = '127.0.0.1';
+    let publicUrl = process.env.NINEROUTER_MCP_PUBLIC_URL?.trim() || undefined;
+    let local = isTruthy(process.env.NINEROUTER_MCP_LOCAL?.trim());
 
     for (let index = 2; index < argv.length; index += 1) {
         const argument = argv[index];
@@ -36,10 +55,23 @@ function parseHttpArgs(argv: string[]): HttpArgs {
             if (!nextValue) throw new Error(`Missing value for --host.`);
             host = nextValue;
             index += 1;
+        } else if (argument === '--public-url') {
+            if (!nextValue) throw new Error(`Missing value for --public-url.`);
+            publicUrl = nextValue;
+            index += 1;
+        } else if (argument === '--local') {
+            local = true;
         }
     }
 
-    return { port, host, path: '/mcp', configPath: resolveConfigPath(argv) };
+    return {
+        port,
+        host,
+        path: '/mcp',
+        configPath: resolveConfigPath(argv),
+        publicUrl: publicUrl ? normalizePublicUrl(publicUrl) : undefined,
+        local,
+    };
 }
 
 function toWebRequest(req: IncomingMessage): Request {
@@ -120,9 +152,85 @@ type Session = {
     server: McpServer;
 };
 
+/**
+ * Serve a generated file from a signed link. The HMAC and the expiry are the
+ * only authorization, so a browser or download tool can fetch the file without
+ * the MCP session that produced it.
+ */
+async function sendDownload(
+    req: IncomingMessage,
+    res: import('node:http').ServerResponse,
+    store: DownloadStore,
+    url: URL,
+): Promise<void> {
+    applyCors(res);
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') {
+        res.statusCode = 405;
+        res.setHeader('content-type', 'text/plain');
+        res.end('Method Not Allowed');
+        return;
+    }
+    if (req.method === 'OPTIONS') {
+        res.statusCode = 204;
+        res.end();
+        return;
+    }
+
+    store.prune();
+    const segments = url.pathname.slice(FILES_PATH.length + 1).split('/');
+    const [sessionId, id] = segments;
+    const expiresAt = Number(url.searchParams.get('exp'));
+    const token = url.searchParams.get('sig') ?? '';
+    const entry =
+        segments.length === 2 && sessionId && id
+            ? store.verify(sessionId, id, expiresAt, token)
+            : undefined;
+
+    if (!entry) {
+        res.statusCode = 403;
+        res.setHeader('content-type', 'text/plain');
+        res.end('Invalid or expired link');
+        return;
+    }
+
+    let body: Buffer;
+    try {
+        body = await readFile(entry.path);
+    } catch {
+        res.statusCode = 404;
+        res.setHeader('content-type', 'text/plain');
+        res.end('File not found');
+        return;
+    }
+
+    res.statusCode = 200;
+    res.setHeader('content-type', entry.contentType);
+    res.setHeader('content-length', String(body.length));
+    res.setHeader('content-disposition', `attachment; filename="${entry.fileName}"`);
+    res.setHeader('cache-control', 'private, no-store');
+    if (req.method === 'HEAD') {
+        res.end();
+        return;
+    }
+    res.end(body);
+}
+
 async function main(): Promise<void> {
     const args = parseHttpArgs(process.argv);
     const config: NinerouterConfig = await getConfig({ configPath: args.configPath });
+
+    const downloads = args.local ? undefined : new DownloadStore();
+    const runtime: MediaRuntime = downloads
+        ? {
+              remote: true,
+              expose: createUrlExposer(
+                  downloads,
+                  FILES_PATH,
+                  args.publicUrl,
+                  `http://${args.host}:${args.port}`,
+              ),
+          }
+        : LOCAL_RUNTIME;
 
     const sessions = new Map<string, Session>();
 
@@ -131,7 +239,7 @@ async function main(): Promise<void> {
         server: McpServer;
     }> => {
         const server = buildServer();
-        registerTools(server, config);
+        registerTools(server, config, runtime);
         const transport = new WebStandardStreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (sessionId) => {
@@ -161,20 +269,27 @@ async function main(): Promise<void> {
 
         try {
             const url = new URL(req.url ?? '/', 'http://localhost');
-            if (url.pathname !== args.path) {
-                applyCors(res);
-                res.statusCode = 404;
-                res.setHeader('content-type', 'text/plain');
-                res.end('Not Found');
-                log(404);
-                return;
-            }
 
             if (req.method === 'OPTIONS') {
                 applyCors(res);
                 res.statusCode = 204;
                 res.end();
                 log(204);
+                return;
+            }
+
+            if (downloads && url.pathname.startsWith(`${FILES_PATH}/`)) {
+                await sendDownload(req, res, downloads, url);
+                log(res.statusCode);
+                return;
+            }
+
+            if (url.pathname !== args.path) {
+                applyCors(res);
+                res.statusCode = 404;
+                res.setHeader('content-type', 'text/plain');
+                res.end('Not Found');
+                log(404);
                 return;
             }
 
@@ -217,6 +332,11 @@ async function main(): Promise<void> {
 
     await new Promise<void>((resolve) => server.listen(args.port, args.host, resolve));
     console.error(`ninerouter-mcp HTTP listening on http://${args.host}:${args.port}${args.path}`);
+    console.error(
+        downloads
+            ? `generated media served from ${args.publicUrl ?? `http://${args.host}:${args.port}`}${FILES_PATH}/<session>/<id> (signed, 15 min)`
+            : 'generated media returned inline or by path (--local: client shares this filesystem)',
+    );
 
     const shutdown = (): void => {
         server.close(() => {

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { getConfig, resolveConfigPath } from './ninerouter-client.js';
+import { LOCAL_RUNTIME, type MediaRuntime } from './lib/media-output.js';
 import { registerEmbeddingTools } from './tools/embeddings.js';
 import { registerMediaTools } from './tools/media.js';
 import { registerModelTools } from './tools/models.js';
@@ -22,10 +23,14 @@ export function buildServer(): McpServer {
     return server;
 }
 
-export function registerTools(server: McpServer, config: NinerouterConfig): void {
+export function registerTools(
+    server: McpServer,
+    config: NinerouterConfig,
+    runtime: MediaRuntime = LOCAL_RUNTIME,
+): void {
     registerModelTools(server, config);
     registerWebTools(server, config);
-    registerMediaTools(server, config);
+    registerMediaTools(server, config, runtime);
     registerEmbeddingTools(server, config);
 }
 

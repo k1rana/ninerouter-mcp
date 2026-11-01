@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { McpServer } from '@modelcontextprotocol/server';
+import { type CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 import {
     createFileBlob,
@@ -12,6 +12,12 @@ import {
     requestMultipartText,
 } from '../ninerouter-client.js';
 import { tryModelsWithFallback, toPrettyJson } from '../lib/common.js';
+import {
+    LOCAL_RUNTIME,
+    type MediaDelivery,
+    type MediaRuntime,
+    resolveMediaDelivery,
+} from '../lib/media-output.js';
 
 function defaultOutputPath(prefix: string, ext: string): string {
     const safe =
@@ -44,12 +50,77 @@ function extFromContentType(contentType: string | null, fallback: string): strin
     return map[contentType.split(';')[0].trim().toLowerCase()] ?? fallback;
 }
 
-export function registerMediaTools(server: McpServer, config: NinerouterConfig): void {
+const RETURN_MODES = ['auto', 'path', 'inline'] as const;
+
+function returnParam() {
+    return z
+        .enum(RETURN_MODES)
+        .optional()
+        .default('auto')
+        .describe(
+            'How the bytes reach you. `auto` returns a content block under stdio and a signed download URL under HTTP; `inline` forces the content block; `path` returns the server-side path alone.',
+        );
+}
+
+/** The fields a media tool reads off its handler context. */
+type ToolContext = { sessionId?: string; http?: { req?: Request } };
+
+/**
+ * Hand back a written file as a content block, a signed download URL, or the
+ * path alone. A URL replaces `outputPath` because the client is on another host
+ * and cannot open a path the server wrote.
+ */
+async function mediaResult(input: {
+    runtime: MediaRuntime;
+    delivery: MediaDelivery;
+    blockType: 'image' | 'audio';
+    data: string;
+    mimeType: string;
+    filePath: string;
+    bytes: number;
+    contentType: string;
+    ctx: ToolContext | undefined;
+}): Promise<CallToolResult> {
+    const content: CallToolResult['content'] = [];
+    if (input.delivery.inline) {
+        content.push({ type: input.blockType, data: input.data, mimeType: input.mimeType });
+    }
+
+    const details: Record<string, unknown> = {
+        bytes: input.bytes,
+        contentType: input.contentType,
+    };
+
+    if (input.delivery.url && input.runtime.expose) {
+        const exposed = input.runtime.expose({
+            path: input.filePath,
+            contentType: input.contentType,
+            fileName: path.basename(input.filePath),
+            sessionId: input.ctx?.sessionId,
+            request: input.ctx?.http?.req,
+        });
+        details.url = exposed.location;
+        if (exposed.expiresAt !== undefined) {
+            details.urlExpiresAt = new Date(exposed.expiresAt).toISOString();
+        }
+    } else {
+        details.outputPath = input.filePath;
+    }
+
+    content.push({ type: 'text', text: toPrettyJson(details) });
+    return { content };
+}
+
+export function registerMediaTools(
+    server: McpServer,
+    config: NinerouterConfig,
+    runtime: MediaRuntime = LOCAL_RUNTIME,
+): void {
     server.registerTool(
         'generate_image',
         {
             description:
-                'Generate an image from a text prompt. Always writes the file and returns the image as a base64 content block plus `{ outputPath, bytes, contentType }`. Omit `outputPath` to write to a temp file with extension auto-derived from upstream content-type (.png default).',
+                'Generate an image from a text prompt. Writes the file, then hands it back per `return`: a base64 content block under stdio (plus `{ outputPath, bytes, contentType }`), or a signed, time-limited download URL under HTTP. Omit `outputPath` to write to a temp file with extension auto-derived from upstream content-type (.png default).',
             inputSchema: z.object({
                 prompt: z.string().min(1).describe('Image prompt.'),
                 model: z
@@ -73,9 +144,13 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                     .describe(
                         'Where to write the image. Default: temp dir, extension derived from upstream content-type.',
                     ),
+                return: returnParam(),
             }),
         },
-        async ({ prompt, model, provider, n, size, quality, outputPath }) => {
+        async (
+            { prompt, model, provider, n, size, quality, outputPath, return: returnMode },
+            ctx,
+        ) => {
             const userModel = model ?? provider;
             const defaultModels = config.defaultModels?.generateImage ?? [];
             const modelsToTry = userModel ? [userModel] : defaultModels;
@@ -112,23 +187,17 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
             const ext = extFromContentType(result.contentType, '.png');
             const resolvedPath = outputPath ?? defaultOutputPath(prompt, ext);
             await writeFile(resolvedPath, result.bytes);
-            return {
-                content: [
-                    {
-                        type: 'image',
-                        data: result.b64,
-                        mimeType: result.contentType ?? 'image/png',
-                    },
-                    {
-                        type: 'text',
-                        text: toPrettyJson({
-                            outputPath: resolvedPath,
-                            bytes: result.bytes.length,
-                            contentType: result.contentType,
-                        }),
-                    },
-                ],
-            };
+            return await mediaResult({
+                runtime,
+                delivery: resolveMediaDelivery(returnMode, runtime),
+                blockType: 'image',
+                data: result.b64,
+                mimeType: result.contentType ?? 'image/png',
+                filePath: resolvedPath,
+                bytes: result.bytes.length,
+                contentType: result.contentType,
+                ctx,
+            });
         },
     );
 
@@ -136,7 +205,7 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
         'text_to_speech',
         {
             description:
-                'Convert text to speech. Always writes the audio file and returns `{ outputPath, bytes, contentType }`. Omit `outputPath` to write to a temp file as .mp3; pass a path to control location.',
+                'Convert text to speech. Writes the audio file, then hands it back per `return`: a base64 audio content block under stdio (plus `{ outputPath, bytes, contentType }`), or a signed, time-limited download URL under HTTP. Omit `outputPath` to write to a temp file as .mp3; pass a path to control location.',
             inputSchema: z.object({
                 input: z.string().min(1).describe('Text to synthesize.'),
                 model: z
@@ -157,9 +226,10 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
                     .describe(
                         'Where to write the audio. Default: temp dir, extension derived from upstream content-type (.mp3 default).',
                     ),
+                return: returnParam(),
             }),
         },
-        async ({ input, model, provider, outputPath }) => {
+        async ({ input, model, provider, outputPath, return: returnMode }, ctx) => {
             const userModel = model ?? provider;
             const defaultModels = config.defaultModels?.textToSpeech ?? [];
             const modelsToTry = userModel ? [userModel] : defaultModels;
@@ -188,23 +258,17 @@ export function registerMediaTools(server: McpServer, config: NinerouterConfig):
             const ext = extFromContentType(result.contentType, '.mp3');
             const resolvedPath = outputPath ?? defaultOutputPath(input, ext);
             await writeFile(resolvedPath, result.bytes);
-            return {
-                content: [
-                    {
-                        type: 'audio',
-                        data: result.b64,
-                        mimeType: result.contentType,
-                    },
-                    {
-                        type: 'text',
-                        text: toPrettyJson({
-                            outputPath: resolvedPath,
-                            bytes: result.bytes.length,
-                            contentType: result.contentType,
-                        }),
-                    },
-                ],
-            };
+            return await mediaResult({
+                runtime,
+                delivery: resolveMediaDelivery(returnMode, runtime),
+                blockType: 'audio',
+                data: result.b64,
+                mimeType: result.contentType,
+                filePath: resolvedPath,
+                bytes: result.bytes.length,
+                contentType: result.contentType,
+                ctx,
+            });
         },
     );
 
