@@ -21,14 +21,15 @@ base_url = "http://localhost:20128"
 # If user doesn't specify a model, these will be tried in order
 [default_models]
 
-# Web search - tries tavily first, falls back to brave if tavily fails
-web_search = ["tavily/search", "brave-search/search"]
+# Web search - tries tavily first, falls back to serper if tavily fails
+# Ids are 9Router provider ids; catalog ids like "tavily/search" also work.
+web_search = ["tavily", "serper"]
 
 # Or use single string for just one default
-# web_search = "tavily/search"
+# web_search = "tavily"
 
-# Web fetch - tries firecrawl first, then jina-reader
-web_fetch = ["firecrawl/fetch", "jina-reader/fetch"]
+# Web fetch - tries tavily first, then jina-reader
+web_fetch = ["tavily", "jina-reader"]
 
 # Image generation
 generate_image = "openai/dall-e-3"

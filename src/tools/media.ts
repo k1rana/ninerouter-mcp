@@ -11,7 +11,7 @@ import {
     requestJson,
     requestMultipartText,
 } from '../ninerouter-client.js';
-import { tryModelsWithFallback, toPrettyJson } from './common.js';
+import { tryModelsWithFallback, toPrettyJson } from '../lib/common.js';
 
 function defaultOutputPath(prefix: string, ext: string): string {
     const safe =

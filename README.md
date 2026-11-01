@@ -7,7 +7,7 @@
 
 MCP server that exposes 9Router capabilities as native tools for any MCP client: model discovery, automatic fallback, and Zod-validated inputs.
 
-> **Status:** 9Router already hides provider-specific complexity behind a single API. This server exposes that API through MCP, so agents and apps can call web search, web fetch, image generation, TTS, STT, and embeddings as standard MCP tools — no skill-file loading, no per-provider glue code.
+> **Status:** 9Router already hides provider-specific complexity behind a single API. This server exposes that API through MCP, so agents and apps can call web search, web fetch, image generation, TTS, STT, and embeddings as standard MCP tools: no skill-file loading, no per-provider glue code.
 
 ## Why use it
 
@@ -17,7 +17,7 @@ MCP server that exposes 9Router capabilities as native tools for any MCP client:
 - One config file for endpoint, auth, and default models with fallback chains.
 - Single transport (`stdio`); works with any MCP-capable client.
 
-Chat / code generation is intentionally **not** included — that is what the host model is for.
+Chat / code generation is intentionally **not** included. That is what the host model is for.
 
 ## Contents
 
@@ -31,7 +31,7 @@ Chat / code generation is intentionally **not** included — that is what the ho
 
 ## Installation
 
-The package is `ninerouter-mcp` on npm. The JSON body is identical across every MCP client — only the top-level key and file path differ. Paste the block into the right key in your client's config:
+The package is `ninerouter-mcp` on npm. The JSON body is identical across every MCP client. Only the top-level key and file path differ. Paste the block into the right key in your client's config:
 
 ```json
 {
@@ -128,8 +128,8 @@ base_url = "http://localhost:20128"
 # Single string = one model.
 # Array = tried in order, first success wins, errors are aggregated.
 [default_models]
-web_search      = ["tavily/search", "brave-search/search"]
-web_fetch       = ["firecrawl/fetch", "jina-reader/fetch"]
+web_search      = ["tavily", "serper"]
+web_fetch       = ["tavily", "jina-reader"]
 generate_image  = "openai/dall-e-3"
 text_to_speech  = "openai/tts-1"
 speech_to_text  = ["openai/whisper-1", "groq/whisper-large-v3-turbo"]
@@ -185,7 +185,7 @@ Every tool is registered with the MCP server at startup. Unless noted, all tools
 
 ### `list_models`
 
-Look up model ids exposed by 9Router. This tool is optional: every other tool works without it, because each has a configured default model or fallback chain. Call it only to target a specific model or to discover ids that differ from the defaults. It filters by `search`, then pages through the matches with `offset`/`limit`, so a large catalog cannot flood the context window. Each response reports `total`, `count`, `offset`, and `nextOffset` (omitted on the last page). The upstream list is cached for about a minute, because 9Router rebuilds the whole catalog on every request (several seconds), so only the first call is slow.
+Look up model ids exposed by 9Router. This tool is optional: every other tool works without it, because each has a configured default model or fallback chain. Call it only to target a specific model or to discover ids that differ from the defaults. It filters by `search`, then pages through the matches with `offset`/`limit`, so a large catalog cannot flood the context window. Each response reports `total`, `count`, `offset`, and `nextOffset` (omitted on the last page). Entries returned for `kind: "web"` also carry `model`, the id to hand to `web_search` or `web_fetch`. The upstream list is cached for about a minute, because 9Router rebuilds the whole catalog on every request (several seconds), so only the first call is slow.
 
 | Parameter | Type    | Required | Description                                                                                              |
 | --------- | ------- | -------- | -------------------------------------------------------------------------------------------------------- |
@@ -210,29 +210,50 @@ Built-in defaults (used when a key is omitted): `limit = 20`, `offset = 0`, `cac
 
 Search the web through 9Router.
 
-| Parameter      | Type   | Default | Notes                                                                                                |
-| -------------- | ------ | ------- | ---------------------------------------------------------------------------------------------------- |
-| `query`        | string | —       | Required.                                                                                            |
-| `model`        | string | —       | 9Router model id (e.g. `tavily/search`). Falls back to `provider`, then `default_models.web_search`. |
-| `provider`     | string | —       | Alias for `model`.                                                                                   |
-| `maxResults`   | number | `5`     | 1–20.                                                                                                |
-| `searchType`   | string | `web`   | `web` or `news`.                                                                                     |
-| `country`      | string | —       |                                                                                                      |
-| `language`     | string | —       |                                                                                                      |
-| `timeRange`    | string | —       |                                                                                                      |
-| `domainFilter` | string | —       |                                                                                                      |
+| Parameter      | Type            | Default | Notes                                                                                                                                                            |
+| -------------- | --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`        | string          | —       | Required.                                                                                                                                                        |
+| `model`        | string          | —       | Backend id: provider (`tavily`), catalog id (`tavily/search`), or combo (`search-combo`). The server falls back to `provider`, then `default_models.web_search`. |
+| `provider`     | string          | —       | Alias for `model`.                                                                                                                                               |
+| `maxResults`   | number          | `5`     | 1–100. 9Router caps it to the provider limit.                                                                                                                    |
+| `searchType`   | string          | `web`   | `web`, `news`, or `research_paper` (tinyfish only).                                                                                                              |
+| `country`      | string          | —       | Country name (`united states`) or ISO 3166-1 alpha-2 code (`us`). The server rewrites it to the format the provider wants.                                       |
+| `language`     | string          | —       | For example `en` or `vi`.                                                                                                                                        |
+| `timeRange`    | string          | —       | `day`, `week`, `month`, or `year`. Only google-pse, linkup, youcom and searxng read it.                                                                          |
+| `domainFilter` | string \| array | —       | Domains to include (`["snyk.io"]`) or exclude (`["-reddit.com"]`). A comma-separated string also works.                                                          |
+
+Each provider reads only the filters its own request builder knows about, so the same call filters differently depending on the backend:
+
+| Provider        | `country`              | `language` | `timeRange` | `domainFilter` |
+| --------------- | ---------------------- | ---------- | ----------- | -------------- |
+| `tavily`        | name (`united states`) | no         | no          | yes            |
+| `exa`           | no                     | no         | no          | yes            |
+| `serper`        | code, lowercase (`us`) | yes        | no          | no             |
+| `brave-search`  | code, uppercase (`US`) | yes        | no          | no             |
+| `perplexity`    | no                     | no         | no          | no             |
+| `google-pse`    | code, lowercase (`us`) | yes        | yes         | no             |
+| `linkup`        | no                     | no         | yes         | yes            |
+| `searchapi`     | code, lowercase (`us`) | yes        | no          | no             |
+| `youcom`        | code, uppercase (`US`) | yes        | yes         | yes            |
+| `searxng`       | no                     | yes        | yes         | no             |
+| `xquik`         | no                     | yes        | no          | no             |
+| `tinyfish`      | code, uppercase (`US`) | yes        | no          | yes            |
+| `ollama-search` | no                     | no         | no          | no             |
+| `glm`           | no                     | no         | no          | no             |
+
+When the chosen provider does not read a filter, the server drops it and says so in the response's `warnings` array, so you can tell an applied filter from an ignored one. The same array reports a country that was rewritten for the provider, a result count that 9Router capped, and a `searchType` the provider cannot use. `perplexity` and `glm` search through a chat model and forward only the query and the result count, which is why none of their filters apply. `ollama-search` hands the country and language to Ollama, whose API ignores both.
 
 ### `web_fetch`
 
 Fetch a URL and return it as markdown, text, or HTML.
 
-| Parameter       | Type   | Default    | Notes                                        |
-| --------------- | ------ | ---------- | -------------------------------------------- |
-| `url`           | string | —          | Required. Must be a valid URL.               |
-| `model`         | string | —          | e.g. `jina-reader/fetch`, `firecrawl/fetch`. |
-| `provider`      | string | —          | Alias for `model`.                           |
-| `format`        | string | `markdown` | `markdown`, `text`, or `html`.               |
-| `maxCharacters` | number | `8000`     | Truncation limit.                            |
+| Parameter       | Type   | Default    | Notes                                                                                   |
+| --------------- | ------ | ---------- | --------------------------------------------------------------------------------------- |
+| `url`           | string | —          | Required. Must be a valid URL.                                                          |
+| `model`         | string | —          | Backend id: provider (`tavily`), catalog id (`tavily/fetch`), or combo (`fetch-combo`). |
+| `provider`      | string | —          | Alias for `model`.                                                                      |
+| `format`        | string | `markdown` | `markdown`, `text`, or `html`.                                                          |
+| `maxCharacters` | number | `8000`     | Truncation limit.                                                                       |
 
 ### `generate_image`
 
@@ -291,6 +312,7 @@ Generate embeddings for a string or a batch of strings.
 
 - **Fallback chain.** For every model-using tool: if `model`/`provider` is set, only that model is tried. Otherwise the chain in `default_models.<tool>` is tried in order. If all entries fail, the tool throws an `All models failed. Errors: ...` error that includes every per-model message.
 - **`provider` is an alias for `model`** on every tool that accepts a model. Set whichever reads better for your use case.
+- **Web ids come in two spellings.** 9Router's catalog publishes `tavily/search` and `tavily/fetch`, while its search and fetch endpoints want the provider itself (`tavily`). Both spellings work here: the action suffix is stripped before the request.
 - **Image and audio are always written to a file and returned as a content block.** `generate_image` and `text_to_speech` request `b64_json` / `mp3` from upstream, write the bytes to `outputPath` (or the OS temp dir if you omit it), and return the asset as an MCP `image` / `audio` content block plus `{ outputPath, bytes, contentType }`. The host can display inline or just use the path. Extension is derived from upstream `content-type`.
 - **Config file wins over env vars.** If you need different settings for a single run, prefer `--config` over exporting env vars.
 - **STT multipart upload.** The tool sends the audio as `multipart/form-data`; `fileName` only matters when the upstream provider inspects the filename.
@@ -299,11 +321,11 @@ Generate embeddings for a string or a batch of strings.
 
 ## Troubleshooting
 
-- **`NINEROUTER_URL is required`** — set the env var or create `~/.config/ninerouter-mcp/config.toml` with `base_url`.
-- **`No model specified and no default_models.<tool> configured`** — either pass `model` in the call or add a `default_models` entry to your config.
-- **`All models failed. Errors: ...`** — every fallback model returned an error; the aggregated message includes each one for diagnosis.
-- **Auth errors (401/403)** — your 9Router instance requires a key; set `NINEROUTER_KEY` or `api_key` in the config file.
-- **STT fails with "Provide audioPath or audioBase64"** — exactly one of those two must be set.
+- **`NINEROUTER_URL is required`**: set the env var or create `~/.config/ninerouter-mcp/config.toml` with `base_url`.
+- **`No model specified and no default_models.<tool> configured`**: either pass `model` in the call or add a `default_models` entry to your config.
+- **`All models failed. Errors: ...`**: every fallback model returned an error; the aggregated message includes each one for diagnosis.
+- **Auth errors (401/403)**: your 9Router instance requires a key; set `NINEROUTER_KEY` or `api_key` in the config file.
+- **STT fails with "Provide audioPath or audioBase64"**: exactly one of those two must be set.
 
 ## Development
 

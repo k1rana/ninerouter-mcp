@@ -5,7 +5,8 @@ import {
     type NinerouterConfig,
     requestGetJson,
 } from '../ninerouter-client.js';
-import { toPrettyJson } from './common.js';
+import { toPrettyJson } from '../lib/common.js';
+import { resolveWebModelId } from '../lib/web-model.js';
 
 const MODEL_KINDS = ['chat', 'image', 'tts', 'embedding', 'web', 'stt', 'image-to-text'] as const;
 
@@ -55,6 +56,15 @@ function findListArray(payload: unknown): { key?: string; items: unknown[] } | n
     return null;
 }
 
+// Web catalog ids carry the action (`tavily/search`); the web tools want the
+// bare provider, so add `model` for the caller to pass through.
+function annotateWebEntry(item: unknown, kind: string | undefined): unknown {
+    if (kind !== 'web' || !isRecord(item) || typeof item.id !== 'string') {
+        return item;
+    }
+    return { ...item, model: resolveWebModelId(item.id).id };
+}
+
 export function registerModelTools(server: McpServer, config: NinerouterConfig): void {
     const cache = new Map<string, { expires: number; payload: unknown }>();
 
@@ -83,7 +93,7 @@ export function registerModelTools(server: McpServer, config: NinerouterConfig):
     server.registerTool(
         'list_models',
         {
-            description: `Look up model ids exposed by 9Router. This tool is optional: the other tools work without it because each has a configured default model or fallback chain. Call it only to target a specific model, or to see which ids exist. \`kind\` filters by capability; \`search\` filters by name. Then \`offset\` and \`limit\` page through the matches (page size defaults to ${LIST_MODELS_DEFAULTS.limit}; \`limit: 0\` returns everything). Each response reports \`total\`, \`count\`, \`offset\`, and \`nextOffset\`, which is absent on the last page. Responses come from a short-lived cache, so repeat calls are fast.`,
+            description: `Look up model ids exposed by 9Router. This tool is optional: the other tools work without it because each has a configured default model or fallback chain. Call it only to target a specific model, or to see which ids exist. \`kind\` filters by capability; \`search\` filters by name. Entries returned for \`kind: "web"\` also carry \`model\`, the id to hand to \`web_search\` or \`web_fetch\`. Then \`offset\` and \`limit\` page through the matches (page size defaults to ${LIST_MODELS_DEFAULTS.limit}; \`limit: 0\` returns everything). Each response reports \`total\`, \`count\`, \`offset\`, and \`nextOffset\`, which is absent on the last page. Responses come from a short-lived cache, so repeat calls are fast.`,
             inputSchema: z.object({
                 kind: z
                     .enum(MODEL_KINDS)
@@ -135,7 +145,9 @@ export function registerModelTools(server: McpServer, config: NinerouterConfig):
 
             const effectiveLimit = (limit ?? defaultLimit) || matched.length;
             const effectiveOffset = Math.min(offset ?? defaultOffset, matched.length);
-            const shown = matched.slice(effectiveOffset, effectiveOffset + effectiveLimit);
+            const shown = matched
+                .slice(effectiveOffset, effectiveOffset + effectiveLimit)
+                .map((item) => annotateWebEntry(item, kind));
             const nextOffset = effectiveOffset + shown.length;
             const hasMore = nextOffset < matched.length;
 

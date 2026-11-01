@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 import { type NinerouterConfig, requestJson } from '../ninerouter-client.js';
-import { tryModelsWithFallback, toPrettyJson } from './common.js';
+import { tryModelsWithFallback, toPrettyJson } from '../lib/common.js';
 
 export function registerEmbeddingTools(server: McpServer, config: NinerouterConfig): void {
     server.registerTool(
